@@ -124,6 +124,9 @@
 # 安装依赖
 npm install
 
+# 若在特定 npm 版本遇到依赖树冲突，可使用：
+# npm install --legacy-peer-deps
+
 # 启动开发服务器 (默认端口 3000)
 npm run dev
 ```
