@@ -1,0 +1,6 @@
+{
+  "name": "NovaStream - 跨平台本地影音中心",
+  "description": "面向 Windows、Linux 与 macOS 的高性能跨平台本地影音管理系统，支持多源元数据刮削、多终端同步播放、硬件加速转码与 NFO 影音库归档。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
