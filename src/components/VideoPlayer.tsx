@@ -29,7 +29,8 @@ import {
   Check,
   Settings2,
   Sparkles,
-  Zap
+  Zap,
+  Upload
 } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -74,6 +75,50 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [currentAudio, setCurrentAudio] = useState<AudioTrack>(item.audioTracks[0] || { id: 'default', language: 'Default', label: 'Default', codec: item.audioCodec, channels: '2.0' });
   const [currentSubtitle, setCurrentSubtitle] = useState<SubtitleTrack | null>(item.subtitles[0] || null);
   const [subDelayMs, setSubDelayMs] = useState(0);
+  const [subFontSize, setSubFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base');
+  const [playerSubtitles, setPlayerSubtitles] = useState<SubtitleTrack[]>(item.subtitles || []);
+  const playerSubFileRef = useRef<HTMLInputElement | null>(null);
+
+  const handlePlayerLocalSubUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    let format: 'ASS' | 'SRT' | 'VTT' = 'SRT';
+    if (file.name.endsWith('.ass') || file.name.endsWith('.ssa')) format = 'ASS';
+    else if (file.name.endsWith('.vtt')) format = 'VTT';
+
+    const newSub: SubtitleTrack = {
+      id: 'player-local-' + Date.now(),
+      language: 'zh-CN / Local',
+      label: `${file.name} (播放器本地载入)`,
+      format,
+      isDefault: true,
+    };
+    setPlayerSubtitles((prev) => [newSub, ...prev]);
+    setCurrentSubtitle(newSub);
+    setShowSubMenu(false);
+  };
+
+  const getSubtitleTextAtTime = (sec: number, sub: SubtitleTrack): string => {
+    const normalized = Math.max(0, sec + subDelayMs / 1000);
+    const cycle = Math.floor(normalized / 10) % 6;
+    if (normalized < 6) {
+      return `${item.title} · ${sub.label}`;
+    }
+    switch (cycle) {
+      case 0:
+        return `[双语精校] 探索浩瀚时空与真实宇宙的永恒光辉 / Exploring the infinite universe`;
+      case 1:
+        return `在理论与真实的交界处，我们见证了未来的诞生 / At the junction of theory and reality, we witnessed tomorrow`;
+      case 2:
+        return `“不要温和地走进那个良夜，怒斥光明的消逝。” / Do not go gentle into that good night`;
+      case 3:
+        return `当星辰在暗夜中闪烁，那是人类不屈的目光 / Stars in the void mirror humanity's unyielding gaze`;
+      case 4:
+        return `[高保真音轨] 跨越光年与维度的交响，此刻与宇宙同频共振。`;
+      default:
+        return `“原子的裂变在微观宇宙中绽放，普罗米修斯盗取了天火。”`;
+    }
+  };
 
   // Real-time simulated hardware telemetry
   const [telemetry, setTelemetry] = useState<TranscodeTelemetry>({
@@ -274,17 +319,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         playsInline
       />
 
-      {/* Simulated Live Subtitle Track Rendering */}
-      {currentSubtitle && isPlaying && (
+      {/* Hidden local subtitle file input */}
+      <input
+        ref={playerSubFileRef}
+        type="file"
+        accept=".srt,.ass,.ssa,.vtt,.sub"
+        onChange={handlePlayerLocalSubUpload}
+        className="hidden"
+      />
+
+      {/* Simulated Live Subtitle Track Rendering - Stays visible even when paused for reading */}
+      {currentSubtitle && (
         <div
-          className="absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-black/60 backdrop-blur-xs rounded text-center text-white text-base sm:text-lg font-medium tracking-wide pointer-events-none transition-all shadow-md"
-          style={{ textShadow: '0 2px 4px rgba(0,0,0,0.9)' }}
+          className={`absolute bottom-24 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-black/80 backdrop-blur-xs rounded-md text-center text-white font-medium tracking-wide pointer-events-none transition-all shadow-xl max-w-[85vw] ${
+            subFontSize === 'sm'
+              ? 'text-xs sm:text-sm'
+              : subFontSize === 'lg'
+              ? 'text-lg sm:text-xl'
+              : subFontSize === 'xl'
+              ? 'text-xl sm:text-2xl font-semibold'
+              : 'text-sm sm:text-base'
+          }`}
+          style={{ textShadow: '0 2px 4px rgba(0,0,0,0.95)' }}
         >
-          {currentTime < 10
-            ? `${item.title} · 原生高保真声道输出`
-            : currentTime < 25
-            ? `[音轨: ${currentAudio.label}]`
-            : `“在浩瀚宇宙中，我们寻找光芒与未来。”`}
+          {getSubtitleTextAtTime(currentTime, currentSubtitle)}
         </div>
       )}
 
@@ -577,7 +635,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                       <span>关闭字幕</span>
                       {currentSubtitle === null && <Check className="w-4 h-4 text-amber-400" />}
                     </button>
-                    {item.subtitles.map((sub) => (
+                    {playerSubtitles.map((sub) => (
                       <button
                         key={sub.id}
                         onClick={() => {
@@ -596,6 +654,37 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                     ))}
                   </div>
 
+                  {/* Load Local Subtitle Button */}
+                  <div className="mt-2 pt-2 border-t border-neutral-800 px-1">
+                    <button
+                      onClick={() => playerSubFileRef.current?.click()}
+                      className="w-full py-1.5 px-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Upload className="w-3 h-3 text-amber-400" />
+                      <span>载入本地外挂字幕 (.srt/.ass)</span>
+                    </button>
+                  </div>
+
+                  {/* Subtitle font size options */}
+                  <div className="mt-2 pt-2 border-t border-neutral-800 px-2 flex items-center justify-between text-[11px]">
+                    <span className="text-neutral-400">字幕字号:</span>
+                    <div className="flex items-center gap-1 font-mono">
+                      {(['sm', 'base', 'lg', 'xl'] as const).map((sz) => (
+                        <button
+                          key={sz}
+                          onClick={() => setSubFontSize(sz)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] uppercase ${
+                            subFontSize === sz
+                              ? 'bg-amber-400 text-neutral-950 font-bold'
+                              : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                          }`}
+                        >
+                          {sz === 'sm' ? '小' : sz === 'base' ? '中' : sz === 'lg' ? '大' : '特大'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Subtitle delay fine-tuning */}
                   {currentSubtitle && (
                     <div className="mt-2 pt-2 border-t border-neutral-800 px-2 flex items-center justify-between text-[11px]">
@@ -603,14 +692,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                       <div className="flex items-center gap-1 font-mono">
                         <button
                           onClick={() => setSubDelayMs((p) => p - 200)}
-                          className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-neutral-300"
+                          className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-neutral-300 cursor-pointer"
                         >
                           -200ms
                         </button>
                         <span className="text-amber-300 w-12 text-center">{subDelayMs}ms</span>
                         <button
                           onClick={() => setSubDelayMs((p) => p + 200)}
-                          className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-neutral-300"
+                          className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-neutral-300 cursor-pointer"
                         >
                           +200ms
                         </button>

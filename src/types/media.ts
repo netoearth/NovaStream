@@ -64,6 +64,8 @@ export interface MediaItem {
   cast: CastMember[];
   posterUrl: string;
   backdropUrl: string;
+  coverOptions?: CoverArtOption[];
+  availableSubtitles?: SubtitleOption[];
   videoUrl: string;
   filePath: string;
   fileSizeGB: number;
@@ -154,4 +156,63 @@ export interface ScraperLog {
   level: 'info' | 'success' | 'warn' | 'error';
   message: string;
   file?: string;
+}
+
+export interface CoverArtOption {
+  id: string;
+  url: string;
+  source: 'TMDB' | 'Douban' | 'Fanart.tv' | 'Bangumi' | 'Local' | 'User';
+  label: string;
+  width?: number;
+  height?: number;
+}
+
+export interface SubtitleOption {
+  id: string;
+  language: string;
+  label: string;
+  format: 'ASS' | 'SRT' | 'VTT';
+  source: 'Shooter (射手网)' | 'SubHD' | 'OpenSubtitles' | 'Local File';
+  downloadUrl?: string;
+  content?: string;
+}
+
+export interface MusicTrack {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  durationSec: number;
+  coverUrl: string;
+  audioUrl: string;
+  lrcLyrics: string;
+  year: number;
+  genre: string;
+  format: 'FLAC' | 'DSD' | 'WAV' | 'MP3' | 'AAC';
+  sampleRate: string; // e.g. "96kHz / 24-bit" or "192kHz / 24-bit"
+  bitDepth: string;
+  bitrateKbps: number;
+  isFavorite: boolean;
+  folderId?: string;
+  nfoContent?: string;
+}
+
+export interface CodecHardwareSupport {
+  codec: string;
+  name: string;
+  supported: boolean;
+  powerEfficient: boolean; // Browser standard flag for hardware GPU accelerated decoding!
+  smooth: boolean;
+}
+
+export interface GpuHardwareDiagnostics {
+  detected: boolean;
+  gpuVendor: string;
+  gpuRenderer: string;
+  webgl2Supported: boolean;
+  webgpuSupported: boolean;
+  hardwareDecoders: CodecHardwareSupport[];
+  driverVersion?: string;
+  isDedicatedGpu: boolean;
+  testTimestamp: string;
 }

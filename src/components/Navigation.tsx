@@ -12,10 +12,11 @@ import {
   Layers,
   Search,
   Sliders,
-  ShieldCheck
+  ShieldCheck,
+  Music
 } from 'lucide-react';
 
-export type ActiveTab = 'home' | 'movies' | 'tv' | 'scraper' | 'transcoder' | 'syncplay' | 'storage' | 'settings';
+export type ActiveTab = 'home' | 'movies' | 'tv' | 'music' | 'scraper' | 'transcoder' | 'syncplay' | 'storage' | 'settings';
 
 interface NavigationProps {
   activeTab: ActiveTab;
@@ -47,6 +48,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'home', label: t.navHome, icon: Layers },
     { id: 'movies', label: t.navMovies, icon: Film },
     { id: 'tv', label: t.navSeries, icon: Tv },
+    { id: 'music', label: t.navMusic, icon: Music },
     { id: 'scraper', label: t.navScraper, icon: Sparkles, badge: unmatchedCount > 0 ? unmatchedCount : undefined },
     { id: 'transcoder', label: t.navTranscoder, icon: Cpu },
     { id: 'syncplay', label: t.navSyncPlay, icon: Radio },

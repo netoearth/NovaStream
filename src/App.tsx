@@ -6,6 +6,7 @@ import {
   AppLanguage,
   HwEngine,
   SyncRoom,
+  MusicTrack,
 } from './types/media';
 import {
   INITIAL_MEDIA_ITEMS,
@@ -19,10 +20,15 @@ import {
   scanCustomFolderDirectory,
   resetToDefaults,
 } from './services/storageVaultService';
+import {
+  loadPersistedMusicTracks,
+  savePersistedMusicTracks,
+} from './services/musicService';
 import { syncService, SyncMessage } from './services/syncService';
 import { DesktopFrame } from './components/DesktopFrame';
 import { Navigation, ActiveTab } from './components/Navigation';
 import { HomeView } from './components/HomeView';
+import { MusicLibrary } from './components/MusicLibrary';
 import { ScraperStudio } from './components/ScraperStudio';
 import { TranscoderLab } from './components/TranscoderLab';
 import { SyncPlayHub } from './components/SyncPlayHub';
@@ -34,13 +40,14 @@ import { VideoPlayer } from './components/VideoPlayer';
 export default function App() {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(() => loadPersistedMedia());
   const [storageFolders, setStorageFolders] = useState<StorageFolder[]>(() => loadPersistedFolders());
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>(() => loadPersistedMusicTracks());
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [platform, setPlatform] = useState<PlatformStyle>('macos');
   const [language, setLanguage] = useState<AppLanguage>('zh-CN');
   const [hwEngine, setHwEngine] = useState<HwEngine>('NVENC');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Persist media items and storage folders whenever they change
+  // Persist media items, storage folders, and music tracks
   useEffect(() => {
     savePersistedMedia(mediaItems);
   }, [mediaItems]);
@@ -48,6 +55,10 @@ export default function App() {
   useEffect(() => {
     savePersistedFolders(storageFolders);
   }, [storageFolders]);
+
+  useEffect(() => {
+    savePersistedMusicTracks(musicTracks);
+  }, [musicTracks]);
 
   // Selected item for modal details
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
@@ -120,6 +131,13 @@ export default function App() {
     );
     if (selectedItem?.id === item.id) {
       setSelectedItem((prev) => (prev ? { ...prev, matchScore: 99.8 } : null));
+    }
+  };
+
+  const handleUpdateMediaItem = (updatedItem: MediaItem) => {
+    setMediaItems((prev) => prev.map((m) => (m.id === updatedItem.id ? updatedItem : m)));
+    if (selectedItem?.id === updatedItem.id) {
+      setSelectedItem(updatedItem);
     }
   };
 
@@ -215,6 +233,14 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'music' && (
+          <MusicLibrary
+            tracks={musicTracks}
+            language={language}
+            onUpdateTracks={setMusicTracks}
+          />
+        )}
+
         {activeTab === 'scraper' && (
           <ScraperStudio
             mediaItems={mediaItems}
@@ -279,6 +305,7 @@ export default function App() {
           }}
           onRescrape={handleRescrapeMedia}
           onToggleFavorite={handleToggleFavorite}
+          onUpdateItem={handleUpdateMediaItem}
         />
       )}
 

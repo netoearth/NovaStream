@@ -1,4 +1,4 @@
-import { MediaItem, ScraperLog, Resolution, VideoCodec, AudioCodec, HdrFormat } from '../types/media';
+import { MediaItem, ScraperLog, Resolution, VideoCodec, AudioCodec, HdrFormat, CoverArtOption, SubtitleOption, SubtitleTrack } from '../types/media';
 
 export interface ParsedFilename {
   raw: string;
@@ -187,6 +187,109 @@ const ONLINE_DATABASE: Record<string, Partial<MediaItem>> = {
   }
 };
 
+export function getCoverCandidatesForMedia(title: string, defaultPoster?: string): CoverArtOption[] {
+  const t = title.toLowerCase();
+  if (t.includes('oppenheimer') || t.includes('奥本海默')) {
+    return [
+      { id: 'cov-opp-1', url: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 官方主视觉海报 (3840×2160 UHD)' },
+      { id: 'cov-opp-2', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣电影中国公映版海报 (4K)' },
+      { id: 'cov-opp-3', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: 'Fanart.tv 纯净版艺术海报 (Textless)' },
+      { id: 'cov-opp-4', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'IMAX 独家限量纪念版海报' },
+    ];
+  }
+  if (t.includes('dune') || t.includes('沙丘')) {
+    return [
+      { id: 'cov-dune-1', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 官方预告主视觉海报 (4K)' },
+      { id: 'cov-dune-2', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣中国公映定档独家海报' },
+      { id: 'cov-dune-3', url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '厄拉科斯沙漠风暴艺术纯净海报' },
+      { id: 'cov-dune-4', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'IMAX 巨幕专属艺术壁纸' },
+    ];
+  }
+  if (t.includes('interstellar') || t.includes('星际穿越')) {
+    return [
+      { id: 'cov-ist-1', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 虫洞深空探索官方海报 (4K)' },
+      { id: 'cov-ist-2', url: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣十周年重映高分纪念海报' },
+      { id: 'cov-ist-3', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '黑洞卡冈图雅 4K 纯净艺术壁纸' },
+    ];
+  }
+  if (t.includes('cyberpunk') || t.includes('边缘行者')) {
+    return [
+      { id: 'cov-cp-1', url: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80', source: 'Bangumi', label: 'Trigger 官方动画原画主海报' },
+      { id: 'cov-cp-2', url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '夜之城露西与大卫月面梦想海报' },
+      { id: 'cov-cp-3', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '赛博霓虹纯净艺术封绘 (4K)' },
+    ];
+  }
+
+  const basePoster = defaultPoster || 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80';
+  return [
+    { id: 'cov-gen-1', url: basePoster, source: 'TMDB', label: `TMDB 官方主海报 (3840×2160)` },
+    { id: 'cov-gen-2', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣电影公映纪念海报 (4K)' },
+    { id: 'cov-gen-3', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: 'Fanart.tv 纯净艺术版海报' },
+    { id: 'cov-gen-4', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: '影院高保真宣传海报' },
+  ];
+}
+
+export function getSubtitleCandidatesForMedia(title: string, year?: number): SubtitleOption[] {
+  const displayTitle = title.split('(')[0].trim() || '电影';
+  return [
+    {
+      id: `sub-shooter-${Date.now()}-1`,
+      language: 'zh-CN / en',
+      label: `${displayTitle} 蓝光原盘简英双语特效精校字幕 (射手网 Shooter API 99.8%)`,
+      format: 'ASS',
+      source: 'Shooter (射手网)',
+      content: `1
+00:00:02,500 --> 00:00:08,200
+[双语特效精校] 探索浩瀚时空与真实宇宙的永恒光辉
+Exploring the infinite universe and eternal brilliance
+
+2
+00:00:10,000 --> 00:00:18,500
+在理论与真实的交界处，我们见证了未来的诞生。
+At the junction of theory and reality, we witnessed the birth of tomorrow.`,
+    },
+    {
+      id: `sub-subhd-${Date.now()}-2`,
+      language: 'zh-CN',
+      label: `${displayTitle} 官方公映听障辅助高对比简体中文 (SubHD 99.4%)`,
+      format: 'SRT',
+      source: 'SubHD',
+      content: `1
+00:00:03,000 --> 00:00:09,000
+【官方公映听障辅助简体】
+沉浸式多声道全频音效渲染已就绪
+
+2
+00:00:12,000 --> 00:00:19,000
+不要温和地走进那个良夜，怒斥光明的消逝。`,
+    },
+    {
+      id: `sub-opensubs-${Date.now()}-3`,
+      language: 'en',
+      label: `${displayTitle} English Complete Hearing Impaired SDH (OpenSubtitles 98.9%)`,
+      format: 'VTT',
+      source: 'OpenSubtitles',
+      content: `WEBVTT
+
+1
+00:00:04.000 --> 00:00:11.000
+[Dramatic orchestral crescendo swells in background]
+The theoretical possibilities have now become an irrevocable reality.`,
+    },
+    {
+      id: `sub-local-${Date.now()}-4`,
+      language: 'zh-TW',
+      label: `${displayTitle} 繁體中文台灣公映典藏字幕 (字幕庫 Zimuku 98.2%)`,
+      format: 'ASS',
+      source: 'Shooter (射手网)',
+      content: `1
+00:00:03,000 --> 00:00:08,500
+繁體中文公映精校特效字幕
+縱身躍入時間之海，尋找失落的星塵。`,
+    },
+  ];
+}
+
 export async function scrapeMetadataForFile(
   filename: string,
   onLog?: (log: ScraperLog) => void
@@ -209,8 +312,8 @@ export async function scrapeMetadataForFile(
   const query = parsed.cleanTitle.toLowerCase();
   let matchedKey = Object.keys(ONLINE_DATABASE).find(k => query.includes(k) || k.includes(query));
 
+  let matchData: Partial<MediaItem>;
   if (!matchedKey) {
-    // Default fallback mock
     onLog?.({
       id: Math.random().toString(),
       timestamp: new Date().toLocaleTimeString(),
@@ -218,7 +321,7 @@ export async function scrapeMetadataForFile(
       message: `TMDB 模糊查询命中候选条目，自动根据文件哈希校验元数据`,
       file: filename,
     });
-    return {
+    matchData = {
       title: parsed.cleanTitle || '未知影视文件',
       originalTitle: parsed.cleanTitle || 'Unknown Title',
       year: parsed.year || 2024,
@@ -233,16 +336,46 @@ export async function scrapeMetadataForFile(
       posterUrl: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80',
       backdropUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&auto=format&fit=crop&q=80',
     };
+  } else {
+    matchData = ONLINE_DATABASE[matchedKey];
   }
 
-  const matchData = ONLINE_DATABASE[matchedKey];
+  // 1. Scrape Cover Options
+  const coverOptions = getCoverCandidatesForMedia(matchData.title || parsed.cleanTitle, matchData.posterUrl);
   onLog?.({
     id: Math.random().toString(),
     timestamp: new Date().toLocaleTimeString(),
     level: 'success',
-    message: `已从 ${matchData.matchedSource} 抓取海报、演职人员、剧照与高分评价 (${matchData.matchScore}%)`,
+    message: `[封面图刮削] 已从 TMDB / 豆瓣 / Fanart.tv 匹配获取 ${coverOptions.length} 张 4K 高分辨率海报与背景图`,
     file: filename,
   });
+
+  // 2. Scrape Subtitles Options
+  const subOptions = getSubtitleCandidatesForMedia(matchData.title || parsed.cleanTitle, matchData.year || parsed.year);
+  onLog?.({
+    id: Math.random().toString(),
+    timestamp: new Date().toLocaleTimeString(),
+    level: 'success',
+    message: `[字幕智能刮削] 射手网 Shooter API 哈希比对命中，成功抓取 ${subOptions.length} 套简英双语 ASS 特效与官方 SRT 字幕`,
+    file: filename,
+  });
+
+  const boundSubtitles: SubtitleTrack[] = [
+    {
+      id: subOptions[0].id,
+      language: subOptions[0].language,
+      label: subOptions[0].label,
+      format: subOptions[0].format,
+      isDefault: true,
+    },
+    {
+      id: subOptions[1].id,
+      language: subOptions[1].language,
+      label: subOptions[1].label,
+      format: subOptions[1].format,
+      isDefault: false,
+    },
+  ];
 
   return {
     ...matchData,
@@ -250,6 +383,9 @@ export async function scrapeMetadataForFile(
     hdr: parsed.hdr,
     videoCodec: parsed.videoCodec,
     audioCodec: parsed.audioCodec,
+    coverOptions,
+    availableSubtitles: subOptions,
+    subtitles: boundSubtitles,
     nfoContent: generateNfoXml({
       title: matchData.title || parsed.cleanTitle,
       originalTitle: matchData.originalTitle || parsed.cleanTitle,
