@@ -55,6 +55,8 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
   );
   const [parsedPreview, setParsedPreview] = useState(parseFilename(customFilename));
   const [selectedNfoItem, setSelectedNfoItem] = useState<MediaItem | null>(mediaItems[0] || null);
+  const [lastScrapedItem, setLastScrapedItem] = useState<MediaItem | null>(null);
+  const [addedSuccess, setAddedSuccess] = useState(false);
 
   const t = translations[language];
 
@@ -65,6 +67,7 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
 
   const handleTestScrape = async () => {
     setIsScraping(true);
+    setAddedSuccess(false);
     const newLog: ScraperLog = {
       id: Math.random().toString(),
       timestamp: new Date().toLocaleTimeString(),
@@ -77,7 +80,64 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
       setLogs((prev) => [log, ...prev]);
     });
 
+    const parsed = parseFilename(customFilename);
+    const fullItem: MediaItem = {
+      id: 'scraped-' + Date.now(),
+      title: result.title || parsed.cleanTitle,
+      originalTitle: result.originalTitle || parsed.cleanTitle,
+      type: 'movie',
+      year: result.year || parsed.year || 2024,
+      ratingDouban: result.ratingDouban || 8.5,
+      ratingImdb: result.ratingImdb || 8.6,
+      releaseDate: result.releaseDate || '2024-01-01',
+      runtimeMinutes: result.runtimeMinutes || 135,
+      resolution: parsed.resolution,
+      hdr: parsed.hdr,
+      videoCodec: parsed.videoCodec,
+      audioCodec: parsed.audioCodec,
+      audioTracks: [
+        { id: 'trk-1', language: 'Original', label: `原声音轨 (${parsed.audioCodec})`, codec: parsed.audioCodec, channels: '5.1', isDefault: true },
+      ],
+      subtitles: [
+        { id: 'sub-1', language: 'zh-CN', label: '中文简体特效字幕 (ASS)', format: 'ASS', isDefault: true },
+      ],
+      overview: result.overview || '已成功通过智能刮削引擎从远端数据库获取元数据。',
+      genres: result.genres || ['科幻', '剧情'],
+      director: result.director || '未知导演',
+      cast: [
+        { name: '主演', character: '主角', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' },
+      ],
+      posterUrl: result.posterUrl || 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80',
+      backdropUrl: result.backdropUrl || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&auto=format&fit=crop&q=80',
+      videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+      filePath: customFilename,
+      fileSizeGB: 34.2,
+      bitrateMbps: 38.5,
+      nfoContent: result.nfoContent || '',
+      matchedSource: result.matchedSource || 'TMDB',
+      matchScore: result.matchScore || 98.5,
+      addedDate: new Date().toISOString().split('T')[0],
+      watchProgressSec: 0,
+      isFavorite: false,
+    };
+
+    setLastScrapedItem(fullItem);
     setIsScraping(false);
+  };
+
+  const handleImportScrapedItem = () => {
+    if (!lastScrapedItem) return;
+    onUpdateMedia([lastScrapedItem, ...mediaItems]);
+    setAddedSuccess(true);
+    setLogs((prev) => [
+      {
+        id: Math.random().toString(),
+        timestamp: new Date().toLocaleTimeString(),
+        level: 'success',
+        message: `已成功将新抓取的「${lastScrapedItem.title}」存入本地影音库主索引！`,
+      },
+      ...prev,
+    ]);
   };
 
   const handleBatchScrapeAll = async () => {
@@ -206,6 +266,56 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Actionable Scraped Result Card */}
+        {lastScrapedItem && (
+          <div className="p-4 rounded-lg bg-neutral-950/90 border border-amber-500/40 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <img
+                src={lastScrapedItem.posterUrl}
+                alt={lastScrapedItem.title}
+                className="w-12 h-16 object-cover rounded shadow-md shrink-0"
+              />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-white">{lastScrapedItem.title}</h4>
+                  <span className="text-[10px] text-emerald-400 font-mono">
+                    ✓ {lastScrapedItem.matchedSource} 匹配成功 ({lastScrapedItem.matchScore}%)
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 line-clamp-1 mt-0.5">
+                  {lastScrapedItem.overview}
+                </p>
+                <div className="text-[10px] text-neutral-500 font-mono mt-1">
+                  导演: {lastScrapedItem.director} · 评分: ★ {lastScrapedItem.ratingImdb.toFixed(1)} IMDb
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleImportScrapedItem}
+                disabled={addedSuccess}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
+                  addedSuccess
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default'
+                    : 'bg-amber-400 hover:bg-amber-300 text-neutral-950'
+                }`}
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                <span>{addedSuccess ? '已导入影音库' : '一键导入影音库'}</span>
+              </button>
+
+              <button
+                onClick={() => onPlay(lastScrapedItem)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded text-xs transition-colors"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                <span>立即试播</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Grid: Live Scraping Log Console & NFO Inspector */}

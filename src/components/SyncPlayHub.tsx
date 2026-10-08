@@ -39,6 +39,10 @@ export const SyncPlayHub: React.FC<SyncPlayHubProps> = ({
   const [roomCode, setRoomCode] = useState('782910');
   const [copiedCode, setCopiedCode] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [inputJoinCode, setInputJoinCode] = useState('');
+  const [newRoomTitle, setNewRoomTitle] = useState('私人专属家庭影院');
 
   // Synced Room State
   const [currentRoom, setCurrentRoom] = useState<SyncRoom>({
@@ -191,7 +195,23 @@ export const SyncPlayHub: React.FC<SyncPlayHubProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs rounded-lg border border-neutral-700 transition-colors"
+          >
+            <Users className="w-3.5 h-3.5 text-amber-400" />
+            <span>{t.createRoom}</span>
+          </button>
+
+          <button
+            onClick={() => setShowJoinModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs rounded-lg border border-neutral-700 transition-colors"
+          >
+            <Radio className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{t.joinRoom}</span>
+          </button>
+
           <button
             onClick={openNewTestWindow}
             className="flex items-center gap-1.5 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs rounded-lg border border-neutral-700 transition-colors"
@@ -444,6 +464,99 @@ export const SyncPlayHub: React.FC<SyncPlayHubProps> = ({
             >
               关闭
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Create Room Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 max-w-md w-full space-y-4">
+            <h4 className="text-base font-bold text-white flex items-center gap-2">
+              <Users className="w-4 h-4 text-amber-400" />
+              <span>新建局域网协同影厅 (SyncPlay Room)</span>
+            </h4>
+            <div className="space-y-1">
+              <label className="text-xs text-neutral-400">影厅名称</label>
+              <input
+                type="text"
+                value={newRoomTitle}
+                onChange={(e) => setNewRoomTitle(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-2.5 text-xs text-neutral-200 focus:outline-none focus:border-amber-400"
+              />
+            </div>
+            <div className="text-xs text-neutral-400">
+              创建后将自动生成 6 位房间同步 PIN 码，同局域网内任意客户端均可输入 PIN 码或扫描二维码即时加入。
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+                  setRoomCode(newCode);
+                  setCurrentRoom((prev) => ({
+                    ...prev,
+                    roomName: newRoomTitle,
+                  }));
+                  setShowCreateModal(false);
+                }}
+                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-semibold rounded-lg transition-colors"
+              >
+                立即创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Join Room Modal */}
+      {showJoinModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 max-w-sm w-full space-y-4">
+            <h4 className="text-base font-bold text-white flex items-center gap-2">
+              <Radio className="w-4 h-4 text-emerald-400" />
+              <span>输入 6 位房间 PIN 码加入</span>
+            </h4>
+            <div className="space-y-1">
+              <input
+                type="text"
+                maxLength={6}
+                value={inputJoinCode}
+                onChange={(e) => setInputJoinCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="例如: 782910"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-3 text-center text-lg font-mono font-bold tracking-widest text-amber-300 focus:outline-none focus:border-amber-400"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowJoinModal(false)}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (inputJoinCode.length === 6) {
+                    setRoomCode(inputJoinCode);
+                    setShowJoinModal(false);
+                    setInputJoinCode('');
+                  }
+                }}
+                disabled={inputJoinCode.length !== 6}
+                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-neutral-950 text-xs font-semibold rounded-lg transition-colors"
+              >
+                加入同步
+              </button>
+            </div>
           </div>
         </div>
       )}
