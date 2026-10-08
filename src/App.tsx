@@ -11,6 +11,14 @@ import {
   INITIAL_MEDIA_ITEMS,
   INITIAL_STORAGE_FOLDERS,
 } from './data/mockMedia';
+import {
+  loadPersistedFolders,
+  savePersistedFolders,
+  loadPersistedMedia,
+  savePersistedMedia,
+  scanCustomFolderDirectory,
+  resetToDefaults,
+} from './services/storageVaultService';
 import { syncService, SyncMessage } from './services/syncService';
 import { DesktopFrame } from './components/DesktopFrame';
 import { Navigation, ActiveTab } from './components/Navigation';
@@ -24,13 +32,22 @@ import { MediaDetailModal } from './components/MediaDetailModal';
 import { VideoPlayer } from './components/VideoPlayer';
 
 export default function App() {
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>(INITIAL_MEDIA_ITEMS);
-  const [storageFolders, setStorageFolders] = useState<StorageFolder[]>(INITIAL_STORAGE_FOLDERS);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>(() => loadPersistedMedia());
+  const [storageFolders, setStorageFolders] = useState<StorageFolder[]>(() => loadPersistedFolders());
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [platform, setPlatform] = useState<PlatformStyle>('macos');
   const [language, setLanguage] = useState<AppLanguage>('zh-CN');
   const [hwEngine, setHwEngine] = useState<HwEngine>('NVENC');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Persist media items and storage folders whenever they change
+  useEffect(() => {
+    savePersistedMedia(mediaItems);
+  }, [mediaItems]);
+
+  useEffect(() => {
+    savePersistedFolders(storageFolders);
+  }, [storageFolders]);
 
   // Selected item for modal details
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
@@ -106,14 +123,36 @@ export default function App() {
     }
   };
 
-  const handleAddStorageFolder = (folder: StorageFolder) => {
+  const handleAddFolderWithItems = (folder: StorageFolder, newItems: MediaItem[]) => {
     setStorageFolders((prev) => [folder, ...prev]);
+    if (newItems.length > 0) {
+      setMediaItems((prev) => [...newItems, ...prev]);
+    }
   };
 
-  const handleRescanFolder = (id: string) => {
-    setStorageFolders((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, lastScanned: '刚刚', itemCount: f.itemCount + 3 } : f))
-    );
+  const handleRescanFolder = async (folderId: string) => {
+    const folder = storageFolders.find((f) => f.id === folderId);
+    if (!folder) return;
+    const { updatedFolder, newItems } = await scanCustomFolderDirectory(folder);
+    setStorageFolders((prev) => prev.map((f) => (f.id === folderId ? updatedFolder : f)));
+    if (newItems.length > 0) {
+      setMediaItems((prev) => {
+        const existingTitles = new Set(prev.map((m) => m.title));
+        const additions = newItems.filter((m) => !existingTitles.has(m.title));
+        return [...additions, ...prev];
+      });
+    }
+  };
+
+  const handleRemoveFolder = (folderId: string) => {
+    setStorageFolders((prev) => prev.filter((f) => f.id !== folderId));
+    setMediaItems((prev) => prev.filter((m) => m.folderId !== folderId));
+  };
+
+  const handleResetDefaults = () => {
+    const def = resetToDefaults();
+    setStorageFolders(def.folders);
+    setMediaItems(def.media);
   };
 
   return (
@@ -140,6 +179,7 @@ export default function App() {
         {activeTab === 'home' && (
           <HomeView
             mediaItems={mediaItems}
+            storageFolders={storageFolders}
             language={language}
             searchQuery={searchQuery}
             onPlay={handlePlayMedia}
@@ -152,6 +192,7 @@ export default function App() {
         {activeTab === 'movies' && (
           <HomeView
             mediaItems={mediaItems}
+            storageFolders={storageFolders}
             language={language}
             searchQuery={searchQuery}
             onPlay={handlePlayMedia}
@@ -164,6 +205,7 @@ export default function App() {
         {activeTab === 'tv' && (
           <HomeView
             mediaItems={mediaItems}
+            storageFolders={storageFolders}
             language={language}
             searchQuery={searchQuery}
             onPlay={handlePlayMedia}
@@ -202,9 +244,13 @@ export default function App() {
         {activeTab === 'storage' && (
           <StorageManager
             folders={storageFolders}
+            mediaItems={mediaItems}
             language={language}
-            onAddFolder={handleAddStorageFolder}
+            onAddFolderWithItems={handleAddFolderWithItems}
             onRescanFolder={handleRescanFolder}
+            onRemoveFolder={handleRemoveFolder}
+            onNavigateToMovies={() => setActiveTab('movies')}
+            onPlayMedia={handlePlayMedia}
           />
         )}
 
@@ -216,6 +262,7 @@ export default function App() {
             onLanguageChange={setLanguage}
             hwEngine={hwEngine}
             onHwEngineChange={setHwEngine}
+            onResetDefaults={handleResetDefaults}
           />
         )}
       </main>

@@ -74,6 +74,7 @@ export interface MediaItem {
   addedDate: string;
   watchProgressSec: number;
   isFavorite: boolean;
+  folderId?: string;
   episodes?: MediaEpisode[];
 }
 

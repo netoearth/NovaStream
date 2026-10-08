@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MediaItem, AppLanguage } from '../types/media';
+import { MediaItem, AppLanguage, StorageFolder } from '../types/media';
 import { translations } from '../i18n/translations';
 import { MediaCard } from './MediaCard';
 import {
@@ -18,6 +18,7 @@ import {
 
 interface HomeViewProps {
   mediaItems: MediaItem[];
+  storageFolders?: StorageFolder[];
   language: AppLanguage;
   searchQuery: string;
   onPlay: (item: MediaItem) => void;
@@ -28,6 +29,7 @@ interface HomeViewProps {
 
 export const HomeView: React.FC<HomeViewProps> = ({
   mediaItems,
+  storageFolders = [],
   language,
   searchQuery,
   onPlay,
@@ -36,6 +38,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   filterType = 'all',
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | '4k' | 'hdr' | 'watching' | 'favorites'>('all');
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
   const t = translations[language];
 
   // Hero featured item (first item or favorite)
@@ -43,6 +46,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   // Filter media items
   const filteredItems = mediaItems.filter((item) => {
+    // Storage folder filter
+    if (selectedFolderId !== 'all') {
+      const matchFolder = item.folderId === selectedFolderId;
+      const targetFolder = storageFolders.find((f) => f.id === selectedFolderId);
+      const matchPath = targetFolder ? item.filePath.startsWith(targetFolder.path) : false;
+      if (!matchFolder && !matchPath) return false;
+    }
+
     // Type filter
     if (filterType === 'movie' && item.type !== 'movie' && item.type !== 'documentary') return false;
     if (filterType === 'tv' && item.type !== 'tv' && item.type !== 'anime') return false;
@@ -197,9 +208,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </button>
         </div>
 
-        {/* Media count summary */}
-        <div className="text-xs text-neutral-400 font-mono">
-          共收录 <span className="text-neutral-200 font-semibold">{filteredItems.length}</span> 部媒体
+        {/* Right side: Source Folder Filter & Media count summary */}
+        <div className="flex flex-wrap items-center gap-3">
+          {storageFolders.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-neutral-400">
+              <span className="font-mono text-[11px]">磁盘源:</span>
+              <select
+                value={selectedFolderId}
+                onChange={(e) => setSelectedFolderId(e.target.value)}
+                className="bg-neutral-900 border border-neutral-800 text-neutral-300 text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option value="all">全部存储源 ({storageFolders.length} 个挂载点)</option>
+                {storageFolders.map((sf) => (
+                  <option key={sf.id} value={sf.id}>
+                    {sf.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="text-xs text-neutral-400 font-mono">
+            共收录 <span className="text-neutral-200 font-semibold">{filteredItems.length}</span> 部媒体
+          </div>
         </div>
       </div>
 

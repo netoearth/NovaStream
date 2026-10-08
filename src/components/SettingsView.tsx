@@ -22,6 +22,7 @@ interface SettingsViewProps {
   onLanguageChange: (l: AppLanguage) => void;
   hwEngine: HwEngine;
   onHwEngineChange: (e: HwEngine) => void;
+  onResetDefaults?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -31,11 +32,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onLanguageChange,
   hwEngine,
   onHwEngineChange,
+  onResetDefaults,
 }) => {
   const [autoScrape, setAutoScrape] = useState(true);
   const [tmdbKey, setTmdbKey] = useState('tmdb_demo_key_77a94f');
   const [doubanPriority, setDoubanPriority] = useState(true);
   const [backupExported, setBackupExported] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   const t = translations[language];
 
@@ -170,21 +173,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* Backup and export */}
-      <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-5 flex items-center justify-between">
+      <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h4 className="text-sm font-semibold text-neutral-200">本地影视元数据库归档备份</h4>
+          <h4 className="text-sm font-semibold text-neutral-200">本地影视元数据库归档备份与重置</h4>
           <p className="text-xs text-neutral-400 mt-0.5">
-            导出包含全部 NFO 记录、播放进度、自定海报缓存的 JSON 数据包
+            所有挂载目录、视频索引与 NFO 记录均保存在本机的 `localStorage` 持久化存储中
           </p>
         </div>
 
-        <button
-          onClick={handleExportBackup}
-          className="flex items-center gap-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg transition-colors"
-        >
-          <Download className="w-3.5 h-3.5 text-amber-400" />
-          <span>{backupExported ? '备份已生成' : '导出备份包'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onResetDefaults && (
+            <button
+              onClick={() => {
+                if (window.confirm('确定要重置存储源和电影库为初始演示状态吗？这会清除新挂载的目录。')) {
+                  onResetDefaults();
+                  setResetSuccess(true);
+                  setTimeout(() => setResetSuccess(false), 2500);
+                }
+              }}
+              className="px-3.5 py-2 bg-neutral-800 hover:bg-rose-900/40 hover:text-rose-300 text-neutral-300 text-xs font-semibold rounded-lg transition-colors border border-neutral-700"
+            >
+              {resetSuccess ? '已重置演示数据' : '重置为初始预设'}
+            </button>
+          )}
+
+          <button
+            onClick={handleExportBackup}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-semibold rounded-lg transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{backupExported ? '备份已生成' : '导出备份包'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
