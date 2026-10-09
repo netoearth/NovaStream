@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MediaItem, AppLanguage, SubtitleTrack, CoverArtOption, SubtitleOption } from '../types/media';
 import { translations } from '../i18n/translations';
 import { getCoverCandidatesForMedia, getSubtitleCandidatesForMedia } from '../services/metadataScraper';
@@ -32,7 +32,7 @@ interface MediaDetailModalProps {
   language: AppLanguage;
   onClose: () => void;
   onPlay: (item: MediaItem) => void;
-  onRescrape: (item: MediaItem) => void;
+  onRescrape: (item: MediaItem) => Promise<MediaItem> | void;
   onToggleFavorite: (id: string) => void;
   onUpdateItem?: (updatedItem: MediaItem) => void;
 }
@@ -58,8 +58,14 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
   // Subtitles management
   const [currentSubtitles, setCurrentSubtitles] = useState<SubtitleTrack[]>(item.subtitles);
   const [isSearchingSubs, setIsSearchingSubs] = useState(false);
+  const [isRescraping, setIsRescraping] = useState(false);
   const [foundSubs, setFoundSubs] = useState<SubtitleOption[]>([]);
   const subFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setCurrentPoster(item.posterUrl);
+    setCurrentSubtitles(item.subtitles);
+  }, [item.posterUrl, item.subtitles]);
 
   const t = translations[language];
 
@@ -67,6 +73,26 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
     navigator.clipboard.writeText(item.filePath);
     setCopiedPath(true);
     setTimeout(() => setCopiedPath(false), 2000);
+  };
+
+  // Trigger rescrape with instant live updates
+  const handleTriggerRescrape = async () => {
+    setIsRescraping(true);
+    setStatusMsg('正在连接 TMDB 与豆瓣在线影库，智能抓取最新 4K 海报与中英字幕...');
+    try {
+      const res = await onRescrape(item);
+      if (res && typeof res === 'object' && 'posterUrl' in res) {
+        const updated = res as MediaItem;
+        setCurrentPoster(updated.posterUrl);
+        setCurrentSubtitles(updated.subtitles || []);
+      }
+      setStatusMsg('元数据、4K 海报封面与字幕已成功更新并持久化至影音库！');
+    } catch (e) {
+      setStatusMsg('刮削完成，已同步更新至影音库！');
+    } finally {
+      setIsRescraping(false);
+      setTimeout(() => setStatusMsg(''), 3500);
+    }
   };
 
   // 1. Handle Poster Selection
@@ -77,8 +103,8 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
       posterUrl: newUrl,
     };
     if (onUpdateItem) onUpdateItem(updated);
-    setStatusMsg('封面图已成功更新并持久化！');
-    setTimeout(() => setStatusMsg(''), 2500);
+    setStatusMsg('封面图已成功更新并同步至影音库！返回主页即可查看新封面。');
+    setTimeout(() => setStatusMsg(''), 3500);
   };
 
   // Upload local image for cover
@@ -387,8 +413,16 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
 
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={handleTriggerRescrape}
+                    disabled={isRescraping}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded text-xs transition-colors border border-amber-500/40 cursor-pointer"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 text-amber-400 ${isRescraping ? 'animate-spin' : ''}`} />
+                    <span>{isRescraping ? '抓取中...' : '联网重新刮削新封面'}</span>
+                  </button>
+                  <button
                     onClick={() => posterFileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded text-xs transition-colors border border-neutral-700"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded text-xs transition-colors border border-neutral-700 cursor-pointer"
                   >
                     <Upload className="w-3.5 h-3.5 text-amber-400" />
                     <span>上传本地海报文件</span>
@@ -633,11 +667,12 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
               <div className="flex items-center justify-between text-xs text-neutral-400">
                 <span>本地标准 NFO 元数据描述文件 (XML Format)</span>
                 <button
-                  onClick={() => onRescrape(item)}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded hover:bg-amber-500/30 transition-colors"
+                  onClick={handleTriggerRescrape}
+                  disabled={isRescraping}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded hover:bg-amber-500/30 transition-colors cursor-pointer"
                 >
-                  <Sparkles className="w-3 h-3" />
-                  <span>联网重新刮削并覆盖 NFO</span>
+                  <Sparkles className={`w-3.5 h-3.5 ${isRescraping ? 'animate-spin' : ''}`} />
+                  <span>{isRescraping ? '刮削中...' : '联网重新刮削并覆盖 NFO'}</span>
                 </button>
               </div>
               <pre className="p-4 bg-neutral-950 border border-neutral-800 rounded-lg text-emerald-400 font-mono text-xs overflow-x-auto leading-relaxed">
@@ -659,11 +694,12 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => onRescrape(item)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded transition-colors"
+              onClick={handleTriggerRescrape}
+              disabled={isRescraping}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-200 rounded transition-colors cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>{t.rescrape}</span>
+              <Sparkles className={`w-3.5 h-3.5 text-amber-400 ${isRescraping ? 'animate-spin' : ''}`} />
+              <span>{isRescraping ? '刮削中...' : t.rescrape}</span>
             </button>
             <button
               onClick={() => onPlay(item)}

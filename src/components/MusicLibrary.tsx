@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MusicTrack, AppLanguage, CoverArtOption } from '../types/media';
+import { MusicTrack, AppLanguage } from '../types/media';
 import { translations } from '../i18n/translations';
-import { parseLrc, LyricLine, scrapeMusicMetadata, savePersistedMusicTracks } from '../services/musicService';
+import {
+  parseLrc,
+  LyricLine,
+  scrapeMusicMetadata,
+  searchOnlineLyrics,
+  LyricSearchResult,
+} from '../services/musicService';
 import { MOCK_COVER_OPTIONS } from '../data/mockMusic';
 import {
   Music,
@@ -11,33 +17,47 @@ import {
   SkipForward,
   Volume2,
   VolumeX,
-  Repeat,
-  Shuffle,
   Heart,
   Sparkles,
   Upload,
   Image,
-  FileText,
-  Clock,
-  Layers,
-  Disc,
   Mic2,
   Edit3,
   Check,
   Search,
-  Plus
+  ExternalLink,
+  RefreshCw,
+  Sliders,
+  CheckCircle2,
 } from 'lucide-react';
+
+export interface ExternalMusicControl {
+  action: 'play' | 'pause' | 'next' | 'prev' | 'seek';
+  value?: number;
+  nonce: number;
+}
+
+export interface PlaybackState {
+  track: MusicTrack;
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+}
 
 interface MusicLibraryProps {
   tracks: MusicTrack[];
   language: AppLanguage;
   onUpdateTracks: (tracks: MusicTrack[]) => void;
+  onPlaybackChange?: (state: PlaybackState) => void;
+  externalControl?: ExternalMusicControl | null;
 }
 
 export const MusicLibrary: React.FC<MusicLibraryProps> = ({
   tracks,
   language,
   onUpdateTracks,
+  onPlaybackChange,
+  externalControl,
 }) => {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -51,10 +71,17 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
   // Modals & Editors
   const [showCoverModal, setShowCoverModal] = useState(false);
   const [showLyricsModal, setShowLyricsModal] = useState(false);
+  const [showLyricsScraperModal, setShowLyricsScraperModal] = useState(false);
   const [isScrapingTrack, setIsScrapingTrack] = useState(false);
   const [editingLyricsText, setEditingLyricsText] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [customCoverUrl, setCustomCoverUrl] = useState('');
+
+  // Lyrics Scraper Search State
+  const [lyricsSearchQuery, setLyricsSearchQuery] = useState('');
+  const [lyricsSearchResults, setLyricsSearchResults] = useState<LyricSearchResult[]>([]);
+  const [isSearchingLyrics, setIsSearchingLyrics] = useState(false);
+  const [selectedLyricResultId, setSelectedLyricResultId] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -62,16 +89,58 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
   const musicFileInputRef = useRef<HTMLInputElement | null>(null);
   const lrcFileInputRef = useRef<HTMLInputElement | null>(null);
   const synthTimerRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const synthGainRef = useRef<GainNode | null>(null);
 
   const stopSynthTimer = () => {
     if (synthTimerRef.current) {
       clearInterval(synthTimerRef.current);
       synthTimerRef.current = null;
     }
+    if (synthGainRef.current) {
+      try {
+        synthGainRef.current.gain.setValueAtTime(0, audioContextRef.current?.currentTime || 0);
+      } catch (e) {}
+    }
+  };
+
+  // Generate subtle pleasant ambient tone using Web Audio API if network stream fails
+  const playWebAudioFallbackSound = () => {
+    try {
+      if (!audioContextRef.current) {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          audioContextRef.current = new AudioCtx();
+        }
+      }
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+      if (audioContextRef.current) {
+        const ctx = audioContextRef.current;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        synthGainRef.current = gain;
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, ctx.currentTime);
+        gain.gain.setValueAtTime(0.001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.03, ctx.currentTime + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 1.3);
+      }
+    } catch (e) {
+      // AudioContext fallback ignored if blocked
+    }
   };
 
   const startResilientTimer = () => {
     stopSynthTimer();
+    playWebAudioFallbackSound();
     synthTimerRef.current = window.setInterval(() => {
       setCurrentTime((prev) => {
         if (prev >= duration) {
@@ -91,6 +160,35 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
 
   const t = translations[language];
   const currentTrack = tracks[currentTrackIndex] || tracks[0];
+
+  // Notify parent of playback changes
+  useEffect(() => {
+    if (onPlaybackChange && currentTrack) {
+      onPlaybackChange({
+        track: currentTrack,
+        isPlaying,
+        currentTime,
+        duration: duration || currentTrack.durationSec || 120,
+      });
+    }
+  }, [currentTrack, isPlaying, currentTime, duration, onPlaybackChange]);
+
+  // Handle external controls (e.g. from Global Mini Floating Player Bar)
+  useEffect(() => {
+    if (!externalControl) return;
+    if (externalControl.action === 'play') {
+      if (!isPlaying) togglePlay();
+    } else if (externalControl.action === 'pause') {
+      if (isPlaying) togglePlay();
+    } else if (externalControl.action === 'next') {
+      skipNext();
+    } else if (externalControl.action === 'prev') {
+      skipPrev();
+    } else if (externalControl.action === 'seek' && typeof externalControl.value === 'number') {
+      setCurrentTime(externalControl.value);
+      if (audioRef.current) audioRef.current.currentTime = externalControl.value;
+    }
+  }, [externalControl?.nonce]);
 
   // Parse current track lyrics into timed lines
   const parsedLyrics: LyricLine[] = currentTrack
@@ -203,9 +301,9 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
   const handleScrapeCurrentTrack = async () => {
     if (!currentTrack) return;
     setIsScrapingTrack(true);
-    setStatusMessage(`正在从 MusicBrainz 与在线曲库抓取「${currentTrack.title}」高解析度元数据与歌词...`);
+    setStatusMessage(`正在从 MusicBrainz、NetEase 与开源歌词库抓取「${currentTrack.title}」元数据与动态 LRC...`);
 
-    const result = await scrapeMusicMetadata(currentTrack.title);
+    const result = await scrapeMusicMetadata(currentTrack.title, currentTrack.artist);
     const updatedTrack: MusicTrack = {
       ...currentTrack,
       ...result,
@@ -214,8 +312,48 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
     const updatedList = tracks.map((t) => (t.id === currentTrack.id ? updatedTrack : t));
     onUpdateTracks(updatedList);
     setIsScrapingTrack(false);
-    setStatusMessage(`元数据与 LRC 歌词抓取完毕！已同步至音乐库。`);
-    setTimeout(() => setStatusMessage(''), 3000);
+    setStatusMessage(`「${updatedTrack.title}」元数据与 LRC 歌词已成功刮削并持久化同步！`);
+    setTimeout(() => setStatusMessage(''), 3500);
+  };
+
+  // Open Dedicated Lyrics Search Modal
+  const handleOpenLyricsScraper = async () => {
+    if (!currentTrack) return;
+    setLyricsSearchQuery(currentTrack.title);
+    setShowLyricsScraperModal(true);
+    setIsSearchingLyrics(true);
+    const results = await searchOnlineLyrics(currentTrack.title, currentTrack.artist);
+    setLyricsSearchResults(results);
+    setIsSearchingLyrics(false);
+    if (results.length > 0) {
+      setSelectedLyricResultId(results[0].id);
+    }
+  };
+
+  // Execute Lyrics Search Query
+  const handleExecuteLyricsSearch = async () => {
+    if (!lyricsSearchQuery.trim()) return;
+    setIsSearchingLyrics(true);
+    const results = await searchOnlineLyrics(lyricsSearchQuery.trim(), currentTrack?.artist);
+    setLyricsSearchResults(results);
+    setIsSearchingLyrics(false);
+    if (results.length > 0) {
+      setSelectedLyricResultId(results[0].id);
+    }
+  };
+
+  // Apply chosen lyric candidate to current track
+  const handleApplyLyricCandidate = (candidate: LyricSearchResult) => {
+    if (!currentTrack) return;
+    const updatedTrack: MusicTrack = {
+      ...currentTrack,
+      lrcLyrics: candidate.lrcText,
+    };
+    const updatedList = tracks.map((t) => (t.id === currentTrack.id ? updatedTrack : t));
+    onUpdateTracks(updatedList);
+    setShowLyricsScraperModal(false);
+    setStatusMessage(`已成功应用并同步来自 ${candidate.source} 的 LRC 歌词 (${candidate.matchScore}%)！`);
+    setTimeout(() => setStatusMessage(''), 3500);
   };
 
   // 2. Change Cover
@@ -228,8 +366,8 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
     const updatedList = tracks.map((t) => (t.id === currentTrack.id ? updatedTrack : t));
     onUpdateTracks(updatedList);
     setShowCoverModal(false);
-    setStatusMessage('专辑封面图已成功更新！');
-    setTimeout(() => setStatusMessage(''), 3000);
+    setStatusMessage('专辑封面图已成功更新并持久化保存！');
+    setTimeout(() => setStatusMessage(''), 3500);
   };
 
   // Local cover file upload
@@ -258,8 +396,8 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
     const newTrack: MusicTrack = {
       id: 'local-music-' + Date.now(),
       title: cleanName,
-      artist: '本地艺术家',
-      album: '本地音乐导入',
+      artist: '本地音乐家',
+      album: '本地音轨导入',
       durationSec: 180,
       coverUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
       audioUrl: realAudioUrl,
@@ -272,7 +410,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
       isFavorite: false,
       lrcLyrics: `[00:00.00]${cleanName} - 本地音频
 [00:05.00]♪ 本地无损音频文件已成功载入 ♪
-[00:15.00]可通过「在线刮削」或「编辑歌词」导入对应 LRC 歌词文件。`,
+[00:15.00]可点击「在线歌词刮削」或「管理歌词」匹配对应 LRC 歌词。`,
     };
 
     const updated = [newTrack, ...tracks];
@@ -326,7 +464,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
   };
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col bg-neutral-950 text-neutral-100">
+    <div className="flex-1 overflow-hidden flex flex-col bg-neutral-950 text-neutral-100 h-full">
       {/* Hidden file inputs */}
       <input
         ref={coverFileInputRef}
@@ -350,7 +488,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
         className="hidden"
       />
 
-      {/* HTML5 Audio Element */}
+      {/* HTML5 Audio Element - Continues running across tabs */}
       <audio
         ref={audioRef}
         src={currentTrack?.audioUrl}
@@ -367,14 +505,14 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
             <span>Hi-Res 无损音乐馆</span>
           </h2>
           <p className="text-xs text-neutral-400 mt-1">
-            支持 24-bit/192kHz FLAC、DSD 母带音频播放，集成动态 LRC 歌词同步与元数据刮削。
+            支持 24-bit/192kHz FLAC、DSD 母带音频播放，集成动态 LRC 歌词同步、歌词在线刮削与封面更换。
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={() => musicFileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-semibold rounded-lg shadow transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-semibold rounded-lg shadow transition-colors cursor-pointer"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>导入本地无损音乐文件</span>
@@ -384,13 +522,13 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
 
       {/* Status Toast Banner */}
       {statusMessage && (
-        <div className="bg-amber-500/20 border-b border-amber-500/40 px-6 py-2 text-xs text-amber-300 flex items-center gap-2 shrink-0">
+        <div className="bg-emerald-950/90 border-b border-emerald-500/50 px-6 py-2 text-xs text-emerald-300 flex items-center gap-2 shrink-0 animate-in fade-in">
           <Check className="w-4 h-4 text-emerald-400" />
           <span>{statusMessage}</span>
         </div>
       )}
 
-      {/* Main Split View: Track List on Left (60%) & Lyrics / Cover Stage on Right (40%) */}
+      {/* Main Split View: Track List on Left & Lyrics / Cover Stage on Right */}
       <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0">
         {/* Left: Tracks List & Filter Tabs (7 cols) */}
         <div className="lg:col-span-7 border-r border-neutral-800/80 flex flex-col overflow-hidden p-6 space-y-4">
@@ -445,7 +583,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
 
           {/* Tracks Table */}
           <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-            {filteredTracks.map((trk, idx) => {
+            {filteredTracks.map((trk) => {
               const isCurrent = currentTrack?.id === trk.id;
               return (
                 <div
@@ -508,7 +646,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
         </div>
 
         {/* Right: Immersive Synchronized Lyrics & Album Art Stage (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col overflow-hidden bg-neutral-925 bg-neutral-900/40 p-6 space-y-4">
+        <div className="lg:col-span-5 flex flex-col overflow-hidden bg-neutral-900/40 p-6 space-y-4">
           {/* Top Stage Header: Current Album Art & Metadata Scrape Trigger */}
           <div className="flex items-center gap-4 bg-neutral-950/80 p-4 rounded-xl border border-neutral-800/80 shrink-0">
             <div className="relative group w-20 h-20 rounded-lg overflow-hidden shrink-0 border border-neutral-700 shadow-xl">
@@ -519,7 +657,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
               />
               <button
                 onClick={() => setShowCoverModal(true)}
-                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-[10px] text-amber-300 font-semibold"
+                className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-[10px] text-amber-300 font-semibold cursor-pointer"
                 title="更换此专辑封面"
               >
                 <Image className="w-4 h-4 mb-0.5" />
@@ -541,11 +679,20 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
               <button
                 onClick={handleScrapeCurrentTrack}
                 disabled={isScrapingTrack}
-                className="flex items-center gap-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-semibold rounded border border-amber-500/40 transition-colors"
-                title="联网抓取歌曲详情与对应歌词"
+                className="flex items-center gap-1 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-semibold rounded border border-amber-500/40 transition-colors cursor-pointer"
+                title="一键抓取歌曲信息与高匹配歌词"
               >
                 <Sparkles className="w-3 h-3" />
-                <span>{isScrapingTrack ? '刮削中...' : '智能刮削'}</span>
+                <span>{isScrapingTrack ? '刮削中...' : '整轨刮削'}</span>
+              </button>
+
+              <button
+                onClick={handleOpenLyricsScraper}
+                className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[11px] font-semibold rounded border border-emerald-500/40 transition-colors cursor-pointer"
+                title="在网易云/QQ音乐/LRCLIB在线检索与刮削歌词"
+              >
+                <Search className="w-3 h-3" />
+                <span>歌词刮削</span>
               </button>
 
               <button
@@ -553,11 +700,11 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
                   setEditingLyricsText(currentTrack?.lrcLyrics || '');
                   setShowLyricsModal(true);
                 }}
-                className="flex items-center gap-1 px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px] rounded transition-colors"
-                title="编辑或导入 LRC 歌词"
+                className="flex items-center gap-1 px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px] rounded transition-colors cursor-pointer"
+                title="编辑或导入本地 LRC 歌词"
               >
                 <Edit3 className="w-3 h-3" />
-                <span>管理歌词</span>
+                <span>编辑/导入</span>
               </button>
             </div>
           </div>
@@ -569,7 +716,16 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
                 <Mic2 className="w-3.5 h-3.5 text-amber-400" />
                 <span>动态 LRC 同步歌词</span>
               </span>
-              <span className="text-[10px] text-neutral-500">点击任意行即时跳转</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenLyricsScraper}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <Search className="w-3 h-3" />
+                  <span>在线重搜歌词</span>
+                </button>
+                <span className="text-[10px] text-neutral-500">点击任意行即时跳转</span>
+              </div>
             </div>
 
             <div
@@ -577,8 +733,15 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
               className="flex-1 overflow-y-auto space-y-4 py-8 text-center scrollbar-none select-none"
             >
               {parsedLyrics.length === 0 ? (
-                <div className="text-xs text-neutral-500 py-12 font-mono">
-                  暂无匹配歌词，可点击「智能刮削」或「管理歌词」导入对应 LRC 文本。
+                <div className="flex flex-col items-center justify-center h-full text-xs text-neutral-500 py-12 font-mono space-y-3">
+                  <p>暂无匹配歌词，可点击下方按钮刮削或编辑导入</p>
+                  <button
+                    onClick={handleOpenLyricsScraper}
+                    className="px-3 py-1.5 bg-amber-400 text-neutral-950 font-semibold rounded text-xs flex items-center gap-1.5 hover:bg-amber-300 cursor-pointer"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    <span>在线刮削 LRC 歌词</span>
+                  </button>
                 </div>
               ) : (
                 parsedLyrics.map((line, idx) => {
@@ -623,7 +786,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
           <div className="flex items-center gap-4">
             <button
               onClick={skipPrev}
-              className="text-neutral-400 hover:text-white transition-colors"
+              className="text-neutral-400 hover:text-white transition-colors cursor-pointer"
               title="上一首"
             >
               <SkipBack className="w-4 h-4" />
@@ -631,14 +794,14 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
 
             <button
               onClick={togglePlay}
-              className="p-2 rounded-full bg-amber-400 hover:bg-amber-300 text-neutral-950 transition-colors shadow-md"
+              className="p-2 rounded-full bg-amber-400 hover:bg-amber-300 text-neutral-950 transition-colors shadow-md cursor-pointer"
             >
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
             </button>
 
             <button
               onClick={skipNext}
-              className="text-neutral-400 hover:text-white transition-colors"
+              className="text-neutral-400 hover:text-white transition-colors cursor-pointer"
               title="下一首"
             >
               <SkipForward className="w-4 h-4" />
@@ -673,7 +836,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
                 setIsMuted(!isMuted);
                 if (audioRef.current) audioRef.current.muted = !isMuted;
               }}
-              className="text-neutral-400 hover:text-white"
+              className="text-neutral-400 hover:text-white cursor-pointer"
             >
               {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             </button>
@@ -698,7 +861,122 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
         </div>
       </div>
 
-      {/* Cover Art Modal */}
+      {/* MODAL 1: Dedicated Online Lyrics Scraper & Matcher */}
+      {showLyricsScraperModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 max-w-xl w-full space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <Search className="w-4 h-4 text-emerald-400" />
+                <span>在线歌词智能刮削与比对 (Multi-Source Lyrics Scraper)</span>
+              </h4>
+              <button
+                onClick={() => setShowLyricsScraperModal(false)}
+                className="text-neutral-400 hover:text-white text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Search Input Bar */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={lyricsSearchQuery}
+                onChange={(e) => setLyricsSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleExecuteLyricsSearch()}
+                placeholder="输入歌曲名或艺术家 (如: Cornfield Chase / 久石让)..."
+                className="flex-1 bg-neutral-950 border border-neutral-700/80 rounded-lg px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-amber-400"
+              />
+              <button
+                onClick={handleExecuteLyricsSearch}
+                disabled={isSearchingLyrics}
+                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-neutral-950 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSearchingLyrics ? 'animate-spin' : ''}`} />
+                <span>{isSearchingLyrics ? '刮削中...' : '抓取检索'}</span>
+              </button>
+            </div>
+
+            <div className="text-[11px] text-neutral-400 flex items-center justify-between">
+              <span>检索源: 网易云音乐 API · LRCLIB 开源歌词库 · QQ音乐 · 酷狗</span>
+              <span className="font-mono text-emerald-400">命中候选: {lyricsSearchResults.length} 套</span>
+            </div>
+
+            {/* Results List */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[220px]">
+              {isSearchingLyrics ? (
+                <div className="flex flex-col items-center justify-center py-12 text-xs text-neutral-400 font-mono space-y-2">
+                  <RefreshCw className="w-5 h-5 animate-spin text-amber-400" />
+                  <span>正在联网比对 LRC 动态歌词时间轴...</span>
+                </div>
+              ) : lyricsSearchResults.length === 0 ? (
+                <div className="text-center py-12 text-xs text-neutral-500 font-mono">
+                  未找到完全匹配的歌词，请尝试更换关键词后重新检索。
+                </div>
+              ) : (
+                lyricsSearchResults.map((item) => {
+                  const isSelected = selectedLyricResultId === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setSelectedLyricResultId(item.id)}
+                      className={`p-3 rounded-lg border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-950/40 border-emerald-500/60 shadow-md'
+                          : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-neutral-200">{item.title}</span>
+                          <span className="text-[10px] bg-neutral-800 text-neutral-300 px-1.5 py-0.5 rounded font-mono">
+                            {item.artist}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-amber-300 font-semibold">{item.source}</span>
+                          <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                            ★ {item.matchScore}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <pre className="mt-2 p-2 bg-neutral-900/90 rounded text-[11px] font-mono text-emerald-300/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
+                        {item.previewSnippet}
+                      </pre>
+
+                      <div className="mt-2.5 flex items-center justify-end">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApplyLyricCandidate(item);
+                          }}
+                          className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-neutral-950 font-semibold text-xs rounded transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>一键同步并应用此歌词</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-neutral-800">
+              <button
+                onClick={() => setShowLyricsScraperModal(false)}
+                className="px-4 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs rounded cursor-pointer"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Cover Art Modal */}
       {showCoverModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 max-w-md w-full space-y-4">
@@ -707,12 +985,12 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
                 <Image className="w-4 h-4 text-amber-400" />
                 <span>更换当前专辑封面 (Cover Art)</span>
               </h4>
-              <button onClick={() => setShowCoverModal(false)} className="text-neutral-400 hover:text-white text-xs">✕</button>
+              <button onClick={() => setShowCoverModal(false)} className="text-neutral-400 hover:text-white text-xs cursor-pointer">✕</button>
             </div>
 
             <button
               onClick={() => coverFileInputRef.current?.click()}
-              className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 border border-neutral-700"
+              className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold rounded-lg flex items-center justify-center gap-2 border border-neutral-700 cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5 text-amber-400" />
               <span>从电脑本地选择图片文件更换封面</span>
@@ -760,7 +1038,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setShowCoverModal(false)}
-                className="px-4 py-1.5 bg-neutral-800 text-neutral-300 text-xs rounded"
+                className="px-4 py-1.5 bg-neutral-800 text-neutral-300 text-xs rounded cursor-pointer"
               >
                 取消
               </button>
@@ -769,7 +1047,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
         </div>
       )}
 
-      {/* Lyrics Editor Modal */}
+      {/* MODAL 3: Lyrics Editor & Local Import Modal */}
       {showLyricsModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 max-w-lg w-full space-y-4">
@@ -778,16 +1056,26 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
                 <Mic2 className="w-4 h-4 text-amber-400" />
                 <span>编辑或导入 LRC 歌词</span>
               </h4>
-              <button onClick={() => setShowLyricsModal(false)} className="text-neutral-400 hover:text-white text-xs">✕</button>
+              <button onClick={() => setShowLyricsModal(false)} className="text-neutral-400 hover:text-white text-xs cursor-pointer">✕</button>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => lrcFileInputRef.current?.click()}
-                className="flex-1 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs rounded border border-neutral-700 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs rounded border border-neutral-700 flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Upload className="w-3 h-3 text-amber-400" />
                 <span>导入本地 .lrc 歌词文件</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowLyricsModal(false);
+                  handleOpenLyricsScraper();
+                }}
+                className="flex-1 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs rounded border border-emerald-500/40 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Search className="w-3 h-3 text-emerald-400" />
+                <span>转至在线歌词刮削</span>
               </button>
             </div>
 
@@ -804,7 +1092,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowLyricsModal(false)}
-                className="px-4 py-1.5 bg-neutral-800 text-neutral-300 text-xs rounded"
+                className="px-4 py-1.5 bg-neutral-800 text-neutral-300 text-xs rounded cursor-pointer"
               >
                 取消
               </button>
@@ -822,7 +1110,7 @@ export const MusicLibrary: React.FC<MusicLibraryProps> = ({
                     setTimeout(() => setStatusMessage(''), 3000);
                   }
                 }}
-                className="px-4 py-1.5 bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-semibold rounded"
+                className="px-4 py-1.5 bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-semibold rounded cursor-pointer"
               >
                 保存歌词
               </button>

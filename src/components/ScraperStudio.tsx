@@ -37,6 +37,7 @@ interface ScraperStudioProps {
   language: AppLanguage;
   onUpdateMedia: (items: MediaItem[]) => void;
   onPlay: (item: MediaItem) => void;
+  onNavigateToLibrary?: () => void;
 }
 
 export const ScraperStudio: React.FC<ScraperStudioProps> = ({
@@ -45,6 +46,7 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
   language,
   onUpdateMedia,
   onPlay,
+  onNavigateToLibrary,
 }) => {
   const [logs, setLogs] = useState<ScraperLog[]>([
     {
@@ -94,7 +96,13 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
     setParsedPreview(parseFilename(val));
   };
 
-  const handleTestScrape = async () => {
+  const handleSelectMediaItemToScrape = (item: MediaItem) => {
+    setCustomFilename(item.filePath);
+    setParsedPreview(parseFilename(item.filePath));
+    handleExecuteScrape(item.filePath, item);
+  };
+
+  const handleExecuteScrape = async (filenameToScrape: string, existingItemOverride?: MediaItem) => {
     setIsScraping(true);
     setAddedSuccess(false);
     setStatusNotification('');
@@ -103,20 +111,27 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
       id: Math.random().toString(),
       timestamp: new Date().toLocaleTimeString(),
       level: 'info',
-      message: `开始测试刮削文件: "${customFilename}"`,
+      message: `开始测试刮削文件: "${filenameToScrape}"`,
     };
     setLogs((prev) => [newLog, ...prev]);
 
-    const result = await scrapeMetadataForFile(customFilename, (log) => {
+    const result = await scrapeMetadataForFile(filenameToScrape, (log) => {
       setLogs((prev) => [log, ...prev]);
     });
 
-    const parsed = parseFilename(customFilename);
+    const parsed = parseFilename(filenameToScrape);
     const coverCandidates = result.coverOptions || getCoverCandidatesForMedia(result.title || parsed.cleanTitle, result.posterUrl);
     const subCandidates = result.availableSubtitles || getSubtitleCandidatesForMedia(result.title || parsed.cleanTitle, result.year || parsed.year);
 
+    // If an existing item is matched, use its ID so updating is seamless!
+    const matchedExisting = existingItemOverride || mediaItems.find((m) => {
+      const cleanScraped = (result.title || parsed.cleanTitle).split('(')[0].trim().toLowerCase();
+      const cleanExisting = m.title.split('(')[0].trim().toLowerCase();
+      return (cleanScraped.length > 1 && cleanExisting.includes(cleanScraped)) || m.filePath === filenameToScrape;
+    });
+
     const fullItem: MediaItem = {
-      id: 'scraped-' + Date.now(),
+      id: matchedExisting ? matchedExisting.id : ('scraped-' + Date.now()),
       title: result.title || parsed.cleanTitle,
       originalTitle: result.originalTitle || parsed.cleanTitle,
       type: 'movie',
@@ -146,7 +161,7 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
       posterUrl: result.posterUrl || coverCandidates[0]?.url || 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80',
       backdropUrl: result.backdropUrl || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&auto=format&fit=crop&q=80',
       videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-      filePath: customFilename,
+      filePath: filenameToScrape,
       fileSizeGB: 34.2,
       bitrateMbps: 38.5,
       nfoContent: result.nfoContent || '',
@@ -162,15 +177,43 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
     setResultActiveTab('overview');
   };
 
-  // Select cover candidate
+  const handleTestScrape = () => {
+    handleExecuteScrape(customFilename);
+  };
+
+  // Select cover candidate with instant sync to library if matching item exists
   const handleSelectCover = (coverUrl: string) => {
     if (!lastScrapedItem) return;
-    setLastScrapedItem({
+    const updatedScraped = {
       ...lastScrapedItem,
       posterUrl: coverUrl,
+    };
+    setLastScrapedItem(updatedScraped);
+
+    // Auto-sync into mediaItems so returning to home immediately shows updated poster!
+    const cleanScraped = lastScrapedItem.title.split('(')[0].trim().toLowerCase();
+    const existingIndex = mediaItems.findIndex((m) => {
+      const matchId = m.id === lastScrapedItem.id;
+      const cleanExisting = m.title.split('(')[0].trim().toLowerCase();
+      const matchTitle = (cleanScraped.length > 1 && cleanExisting.includes(cleanScraped)) ||
+        (cleanExisting.length > 1 && cleanScraped.includes(cleanExisting));
+      const matchFile = m.filePath === lastScrapedItem.filePath;
+      return matchId || matchTitle || matchFile;
     });
-    setStatusNotification('已选择此封面图为主海报');
-    setTimeout(() => setStatusNotification(''), 2500);
+
+    if (existingIndex >= 0) {
+      const updatedList = [...mediaItems];
+      updatedList[existingIndex] = {
+        ...updatedList[existingIndex],
+        posterUrl: coverUrl,
+        coverOptions: lastScrapedItem.coverOptions,
+      };
+      onUpdateMedia(updatedList);
+      setStatusNotification('已选择此封面图为主海报，并已即时保存至影音库！返回主页即可查看新封面。');
+    } else {
+      setStatusNotification('已选择此封面图为主海报');
+    }
+    setTimeout(() => setStatusNotification(''), 3000);
   };
 
   // Upload local image as cover
@@ -293,14 +336,51 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
 
   const handleImportScrapedItem = () => {
     if (!lastScrapedItem) return;
-    onUpdateMedia([lastScrapedItem, ...mediaItems]);
+
+    const cleanScraped = lastScrapedItem.title.split('(')[0].trim().toLowerCase();
+    const existingIndex = mediaItems.findIndex((m) => {
+      const matchId = m.id === lastScrapedItem.id;
+      const cleanExisting = m.title.split('(')[0].trim().toLowerCase();
+      const matchTitle = (cleanScraped.length > 1 && cleanExisting.includes(cleanScraped)) ||
+        (cleanExisting.length > 1 && cleanScraped.includes(cleanExisting));
+      const matchFile = m.filePath === lastScrapedItem.filePath;
+      return matchId || matchTitle || matchFile;
+    });
+
+    if (existingIndex >= 0) {
+      const updatedList = [...mediaItems];
+      const target = updatedList[existingIndex];
+      updatedList[existingIndex] = {
+        ...target,
+        title: lastScrapedItem.title,
+        originalTitle: lastScrapedItem.originalTitle,
+        year: lastScrapedItem.year,
+        posterUrl: lastScrapedItem.posterUrl,
+        backdropUrl: lastScrapedItem.backdropUrl,
+        coverOptions: lastScrapedItem.coverOptions,
+        subtitles: lastScrapedItem.subtitles,
+        availableSubtitles: lastScrapedItem.availableSubtitles,
+        overview: lastScrapedItem.overview,
+        ratingDouban: lastScrapedItem.ratingDouban,
+        ratingImdb: lastScrapedItem.ratingImdb,
+        director: lastScrapedItem.director,
+        nfoContent: lastScrapedItem.nfoContent,
+        matchScore: lastScrapedItem.matchScore,
+        matchedSource: lastScrapedItem.matchedSource,
+      };
+      onUpdateMedia(updatedList);
+      setStatusNotification(`已成功更新已有影片「${target.title}」的高清封面海报与字幕！`);
+    } else {
+      onUpdateMedia([lastScrapedItem, ...mediaItems]);
+      setStatusNotification(`已成功将「${lastScrapedItem.title}」存入影音库！`);
+    }
     setAddedSuccess(true);
     setLogs((prev) => [
       {
         id: Math.random().toString(),
         timestamp: new Date().toLocaleTimeString(),
         level: 'success',
-        message: `已成功将新抓取的「${lastScrapedItem.title}」连同所选 ${lastScrapedItem.subtitles.length} 条字幕及高清封面存入影音库主索引！`,
+        message: `已成功将「${lastScrapedItem.title}」的全新封面海报与 ${lastScrapedItem.subtitles.length} 条字幕保存至影音库！返回主页即可查看新封面。`,
       },
       ...prev,
     ]);
@@ -402,6 +482,24 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
           </span>
         </div>
 
+        {/* Quick Select from Existing Library Items */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 pb-1 text-xs">
+          <span className="text-neutral-400 font-mono text-[11px] flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span>点选库中已有影片即时换封与重新刮削:</span>
+          </span>
+          {mediaItems.slice(0, 8).map((m) => (
+            <button
+              key={m.id}
+              onClick={() => handleSelectMediaItemToScrape(m)}
+              className="px-2.5 py-1 rounded bg-neutral-800/90 hover:bg-neutral-700 text-neutral-200 text-[11px] font-medium border border-neutral-700/80 transition-colors cursor-pointer hover:border-amber-400 flex items-center gap-1.5"
+            >
+              <span>{m.title.split('(')[0].trim()}</span>
+              <span className="text-[10px] text-amber-400 font-mono">换封</span>
+            </button>
+          ))}
+        </div>
+
         <div className="flex gap-2">
           <input
             type="text"
@@ -499,8 +597,19 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
                   }`}
                 >
                   <CheckCircle className="w-3.5 h-3.5" />
-                  <span>{addedSuccess ? '已成功存入本地影音库' : '一键存入影音库'}</span>
+                  <span>{addedSuccess ? '已同步至本地影音库' : '一键更新至影音库'}</span>
                 </button>
+
+                {onNavigateToLibrary && (
+                  <button
+                    onClick={onNavigateToLibrary}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-semibold text-xs rounded-lg transition-colors cursor-pointer shadow-md"
+                    title="立即返回影音主页查看最新更新的海报"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>返回影音库查看新封面</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => onPlay(lastScrapedItem)}
