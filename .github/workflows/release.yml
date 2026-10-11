@@ -108,7 +108,7 @@ jobs:
           else
             npm install --legacy-peer-deps
           fi
-          npm rebuild lightningcss || true
+          npm rebuild @tailwindcss/oxide lightningcss || true
 
       # Windows 依赖安装 (全平台已锁定在 package-lock.json)
       - name: 📦 Install dependencies (Windows)
@@ -126,13 +126,15 @@ jobs:
             npm install --legacy-peer-deps
           }
 
-          # 强制补齐与重建 Windows x64 原生模块，防止缺失 lightningcss.win32-x64-msvc.node
-          try { npm rebuild lightningcss --verbose } catch { Write-Host "rebuild lightningcss skipped" }
+          # 强制补齐与重建 Windows x64 原生模块，防止缺失 lightningcss 或 oxide 原生模块
+          try { npm rebuild @tailwindcss/oxide lightningcss --verbose } catch { Write-Host "rebuild oxide/lightningcss skipped" }
           try { npm rebuild --platform=win32 --arch=x64 } catch { Write-Host "rebuild win32 skipped" }
 
       # 跨平台强制 Rebuild 原生绑定，确保 macOS ARM64 / Windows / Linux 均能加载 .node 模块
       - name: 🔧 Rebuild native modules
-        run: npm rebuild lightningcss || true
+        run: |
+          rm -rf node_modules/.tailwindcss/oxide-cache node_modules/.vite || true
+          npm rebuild @tailwindcss/oxide lightningcss || true
 
       - name: 🏗️ Build production bundle (Vite)
         run: npm run build

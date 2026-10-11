@@ -122,20 +122,18 @@ jobs:
       - name: 📦 Install Node dependencies
         shell: bash
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci || {
-              echo "⚠️ npm ci encountered an issue, falling back to clean install..."
-              rm -rf node_modules package-lock.json
-              npm install --legacy-peer-deps
-            }
-          else
-            npm install --legacy-peer-deps
-          fi
+          # Force clean install to resolve optional dependency issues
+          rm -rf node_modules package-lock.json
+          npm install --legacy-peer-deps
+          # Rebuild native modules explicitly
+          npm rebuild @tailwindcss/oxide || npm install --legacy-peer-deps
           npm rebuild lightningcss || true
 
-      - name: ✅ Validate frontend build
+      - name: 🧹 Clear Tailwind oxide cache & Validate frontend build
         shell: bash
-        run: npm run build
+        run: |
+          rm -rf node_modules/.tailwindcss/oxide-cache node_modules/.vite
+          npm run build
 
       - name: 🏗️ Build & Package Desktop Application (Tauri v2)
         uses: tauri-apps/tauri-action@v0
