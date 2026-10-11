@@ -100,7 +100,11 @@ jobs:
         if: matrix.shell == 'bash'
         run: |
           if [ -f package-lock.json ]; then
-            npm ci || npm install --legacy-peer-deps
+            npm ci || {
+              echo "⚠️ npm ci failed, falling back to clean npm install..."
+              rm -rf node_modules package-lock.json
+              npm install --legacy-peer-deps
+            }
           else
             npm install --legacy-peer-deps
           fi
@@ -111,7 +115,13 @@ jobs:
         if: matrix.shell == 'pwsh'
         run: |
           if (Test-Path "package-lock.json") {
-            try { npm ci } catch { npm install --legacy-peer-deps }
+            try {
+              npm ci
+            } catch {
+              Write-Host "⚠️ npm ci failed, falling back to clean npm install..."
+              Remove-Item -Recurse -Force node_modules, package-lock.json -ErrorAction SilentlyContinue
+              npm install --legacy-peer-deps
+            }
           } else {
             npm install --legacy-peer-deps
           }

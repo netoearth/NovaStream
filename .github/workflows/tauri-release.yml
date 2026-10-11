@@ -64,12 +64,12 @@ jobs:
 
           - os: ubuntu-22.04
             platform-name: Linux-x64
-            rust-targets: ''
+            rust-targets: 'x86_64-unknown-linux-gnu'
             tauri-args: ''
 
           - os: windows-latest
             platform-name: Windows-x64
-            rust-targets: ''
+            rust-targets: 'x86_64-pc-windows-msvc'
             tauri-args: ''
 
     steps:
@@ -123,10 +123,15 @@ jobs:
         shell: bash
         run: |
           if [ -f package-lock.json ]; then
-            npm ci || npm install --legacy-peer-deps
+            npm ci || {
+              echo "⚠️ npm ci encountered an issue, falling back to clean install..."
+              rm -rf node_modules package-lock.json
+              npm install --legacy-peer-deps
+            }
           else
             npm install --legacy-peer-deps
           fi
+          npm rebuild lightningcss || true
 
       - name: ✅ Validate frontend build
         shell: bash
