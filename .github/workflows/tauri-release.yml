@@ -122,29 +122,15 @@ jobs:
       - name: 📦 Install Node dependencies
         shell: bash
         run: |
-          # Force clean install to resolve npm optional dependency issues
+          # Clean up corrupted cache
           rm -rf node_modules package-lock.json
+
+          # Fresh install with clean state
           npm install --legacy-peer-deps
 
-          # Rebuild and verify native modules for current platform
-          npm rebuild @tailwindcss/oxide --build-from-source || npm rebuild @tailwindcss/oxide || true
+          # Explicitly rebuild the native binding for macOS ARM64
+          npm rebuild @tailwindcss/oxide || true
           npm rebuild lightningcss || true
-
-          # If the current runner platform native binding is still missing, explicitly install the corresponding platform package
-          case "$(uname -s)-$(uname -m)" in
-            "Darwin-arm64")
-              npm install @tailwindcss/oxide-darwin-arm64@4.3.3 --no-save --legacy-peer-deps || true
-              ;;
-            "Darwin-x86_64")
-              npm install @tailwindcss/oxide-darwin-x64@4.3.3 --no-save --legacy-peer-deps || true
-              ;;
-            "Linux-x86_64")
-              npm install @tailwindcss/oxide-linux-x64-gnu@4.3.3 --no-save --legacy-peer-deps || true
-              ;;
-            MINGW*|MSYS*|CYGWIN*)
-              npm install @tailwindcss/oxide-win32-x64-msvc@4.3.3 --no-save --legacy-peer-deps || true
-              ;;
-          esac
 
       - name: 🧹 Clear Tailwind oxide cache & Validate frontend build
         shell: bash
