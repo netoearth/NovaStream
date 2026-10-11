@@ -26,45 +26,18 @@ permissions:
 
 jobs:
   # ========================================================
-  # 阶段 1: 跨平台矩阵构建 (Linux, Windows, macOS)
+  # 阶段 1: 全局静态类型检查与语法校验 (仅在 Linux 上高效执行一次)
+  # 避免在 Windows/macOS runner 上因 @typescript/* 平台二进制差异导致 tsc 异常
   # ========================================================
-  build-matrix:
-    name: 📦 Build (${{ matrix.platform-name }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Linux 构建环境
-          - os: ubuntu-latest
-            platform-name: Linux-x64
-            archive-type: tar-and-zip
-            shell: bash
-
-          # Windows 构建环境
-          - os: windows-latest
-            platform-name: Windows-x64
-            archive-type: zip-powershell
-            shell: pwsh
-
-          # macOS 构建环境
-          - os: macos-latest
-            platform-name: macOS-Universal
-            archive-type: tar-and-zip
-            shell: bash
-
-    defaults:
-      run:
-        shell: ${{ matrix.shell }}
-
+  lint-and-typecheck:
+    name: 🔍 Type Check & Lint (Ubuntu)
+    runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 采用 Node.js 22 LTS，解决 Node.js 20 Deprecated 告警
-      # 避免启用强依赖 lockfile 的 cache: 'npm'，防止未提交 package-lock.json 时中断
       - name: ⚙️ Setup Node.js (22 LTS)
         uses: actions/setup-node@v4
         with:
@@ -77,27 +50,76 @@ jobs:
           else
             npm install --legacy-peer-deps
           fi
+
+      - name: 🔍 Type check (tsc --noEmit)
+        run: npm run lint
+
+  # ========================================================
+  # 阶段 2: 跨平台并行打包构建 (Linux, Windows, macOS)
+  # ========================================================
+  build-matrix:
+    name: 📦 Build (${{ matrix.platform-name }})
+    needs: lint-and-typecheck
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x64 环境
+          - os: ubuntu-latest
+            platform-name: Linux-x64
+            archive-type: tar-and-zip
+            shell: bash
+
+          # Windows x64 环境
+          - os: windows-latest
+            platform-name: Windows-x64
+            archive-type: zip-powershell
+            shell: pwsh
+
+          # macOS Universal 环境
+          - os: macos-latest
+            platform-name: macOS-Universal
+            archive-type: tar-and-zip
+            shell: bash
+
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js (22 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 📦 Install dependencies (Unix)
         if: matrix.shell == 'bash'
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
 
       - name: 📦 Install dependencies (Windows)
+        if: matrix.shell == 'pwsh'
         run: |
           if (Test-Path "package-lock.json") {
             try { npm ci } catch { npm install --legacy-peer-deps }
           } else {
             npm install --legacy-peer-deps
           }
-        if: matrix.shell == 'pwsh'
 
-      - name: 🔍 Type check & Lint
-        run: npm run lint
-
-      - name: 🏗️ Build production bundle
+      - name: 🏗️ Build production bundle (Vite)
         run: npm run build
 
-      # Linux / macOS 打包产物
+      # Linux / macOS 打包产物与 SHA256 校验和
       - name: 🗜️ Package Bundle (Linux / macOS)
         if: matrix.archive-type == 'tar-and-zip'
-        id: pkg_unix
         run: |
           VERSION="${{ github.ref_name }}"
           if [ -z "$VERSION" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -108,13 +130,11 @@ jobs:
           ZIP_NAME="NovaStream-${VERSION}-${{ matrix.platform-name }}.zip"
           TAR_NAME="NovaStream-${VERSION}-${{ matrix.platform-name }}.tar.gz"
 
-          # 压缩 dist 产物
           cd dist
           zip -r "../artifacts/${ZIP_NAME}" ./*
           tar -czf "../artifacts/${TAR_NAME}" ./*
           cd ..
 
-          # 计算 SHA256 校验和
           cd artifacts
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "${ZIP_NAME}" "${TAR_NAME}" > "checksums-${{ matrix.platform-name }}.txt"
@@ -123,10 +143,9 @@ jobs:
           fi
           cd ..
 
-      # Windows 打包产物 (PowerShell)
+      # Windows 打包产物与 SHA256 校验和 (PowerShell 原生支持)
       - name: 🗜️ Package Bundle (Windows)
         if: matrix.archive-type == 'zip-powershell'
-        id: pkg_win
         run: |
           $VERSION = "${{ github.ref_name }}"
           if ([string]::IsNullOrEmpty($VERSION) -or "${{ github.event_name }}" -eq "workflow_dispatch") {
@@ -136,10 +155,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path "artifacts"
           $ZIP_NAME = "NovaStream-${VERSION}-${{ matrix.platform-name }}.zip"
 
-          # 压缩 dist 产物为 zip
           Compress-Archive -Path "dist/*" -DestinationPath "artifacts/$ZIP_NAME" -Force
 
-          # 计算 SHA256
           $hash = (Get-FileHash -Algorithm SHA256 "artifacts/$ZIP_NAME").Hash.ToLower()
           "$hash  $ZIP_NAME" | Out-File -Encoding utf8 "artifacts/checksums-${{ matrix.platform-name }}.txt"
 
@@ -152,7 +169,7 @@ jobs:
           retention-days: 5
 
   # ========================================================
-  # 阶段 2: 汇总所有平台产物并发布 GitHub Release
+  # 阶段 3: 汇总全平台产物并发布到 GitHub Releases
   # ========================================================
   publish-release:
     name: 🚀 Publish Unified Release
@@ -185,15 +202,11 @@ jobs:
         run: |
           mkdir -p final_release
           cd release_assets
-          
-          # 合并所有平台的 SHA256 校验和为单个统一 checksums.txt
           cat checksums-*.txt > ../final_release/checksums.txt 2>/dev/null || true
           rm -f checksums-*.txt
-          
-          # 将所有平台的包移入发布目录
           mv NovaStream-* ../final_release/ 2>/dev/null || true
           cd ..
-          
+
           echo "=== 待发布的文件列表 ==="
           ls -la final_release/
 
