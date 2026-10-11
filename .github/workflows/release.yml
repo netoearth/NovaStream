@@ -1,4 +1,4 @@
-name: Build & Release
+name: 🌐 Cross-Platform Build & Release
 
 on:
   push:
@@ -12,17 +12,50 @@ on:
         required: true
         default: 'v1.0.0'
       release_title:
-        description: 'Release 标题'
+        description: 'Release 标题 (选填)'
         required: false
         default: 'NovaStream Release'
+      is_prerelease:
+        description: '是否为预发布版本 (Pre-release)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: 🚀 Build, Package & Publish Release
-    runs-on: ubuntu-latest
+  # ========================================================
+  # 阶段 1: 跨平台矩阵构建 (Linux, Windows, macOS)
+  # ========================================================
+  build-matrix:
+    name: 📦 Build (${{ matrix.platform-name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux 构建环境
+          - os: ubuntu-latest
+            platform-name: Linux-x64
+            archive-type: tar-and-zip
+            shell: bash
+
+          # Windows 构建环境
+          - os: windows-latest
+            platform-name: Windows-x64
+            archive-type: zip-powershell
+            shell: pwsh
+
+          # macOS 构建环境
+          - os: macos-latest
+            platform-name: macOS-Universal
+            archive-type: tar-and-zip
+            shell: bash
+
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
 
     steps:
       - name: 📥 Checkout repository
@@ -30,7 +63,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: ⚙️ Setup Node.js
+      # 采用 Node.js 22 LTS，解决 Node.js 20 Deprecated 告警
+      # 避免启用强依赖 lockfile 的 cache: 'npm'，防止未提交 package-lock.json 时中断
+      - name: ⚙️ Setup Node.js (22 LTS)
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -42,46 +77,94 @@ jobs:
           else
             npm install --legacy-peer-deps
           fi
+        if: matrix.shell == 'bash'
+
+      - name: 📦 Install dependencies (Windows)
+        run: |
+          if (Test-Path "package-lock.json") {
+            try { npm ci } catch { npm install --legacy-peer-deps }
+          } else {
+            npm install --legacy-peer-deps
+          }
+        if: matrix.shell == 'pwsh'
 
       - name: 🔍 Type check & Lint
-        run: |
-          npm run lint
+        run: npm run lint
 
       - name: 🏗️ Build production bundle
-        run: |
-          npm run build
+        run: npm run build
 
-      - name: 📦 Archive Build Artifacts
-        id: package
+      # Linux / macOS 打包产物
+      - name: 🗜️ Package Bundle (Linux / macOS)
+        if: matrix.archive-type == 'tar-and-zip'
+        id: pkg_unix
         run: |
           VERSION="${{ github.ref_name }}"
           if [ -z "$VERSION" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.tag_name }}"
           fi
-          
-          # 确保 dist 目录构建成功
-          if [ ! -d "dist" ]; then
-            echo "Error: dist directory does not exist!"
-            exit 1
-          fi
 
-          ZIP_NAME="NovaStream-${VERSION}-web.zip"
-          TAR_NAME="NovaStream-${VERSION}-web.tar.gz"
+          mkdir -p artifacts
+          ZIP_NAME="NovaStream-${VERSION}-${{ matrix.platform-name }}.zip"
+          TAR_NAME="NovaStream-${VERSION}-${{ matrix.platform-name }}.tar.gz"
 
-          # 制作压缩包
+          # 压缩 dist 产物
           cd dist
-          zip -r "../${ZIP_NAME}" ./*
-          tar -czf "../${TAR_NAME}" ./*
+          zip -r "../artifacts/${ZIP_NAME}" ./*
+          tar -czf "../artifacts/${TAR_NAME}" ./*
           cd ..
 
-          # 生成 SHA256 校验和文件
-          sha256sum "${ZIP_NAME}" "${TAR_NAME}" > checksums.txt
+          # 计算 SHA256 校验和
+          cd artifacts
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${ZIP_NAME}" "${TAR_NAME}" > "checksums-${{ matrix.platform-name }}.txt"
+          else
+            shasum -a 256 "${ZIP_NAME}" "${TAR_NAME}" > "checksums-${{ matrix.platform-name }}.txt"
+          fi
+          cd ..
 
-          echo "zip_file=${ZIP_NAME}" >> $GITHUB_OUTPUT
-          echo "tar_file=${TAR_NAME}" >> $GITHUB_OUTPUT
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+      # Windows 打包产物 (PowerShell)
+      - name: 🗜️ Package Bundle (Windows)
+        if: matrix.archive-type == 'zip-powershell'
+        id: pkg_win
+        run: |
+          $VERSION = "${{ github.ref_name }}"
+          if ([string]::IsNullOrEmpty($VERSION) -or "${{ github.event_name }}" -eq "workflow_dispatch") {
+            $VERSION = "${{ github.event.inputs.tag_name }}"
+          }
 
-      - name: 🏷️ Ensure Git Tag Exists (for manual dispatch)
+          New-Item -ItemType Directory -Force -Path "artifacts"
+          $ZIP_NAME = "NovaStream-${VERSION}-${{ matrix.platform-name }}.zip"
+
+          # 压缩 dist 产物为 zip
+          Compress-Archive -Path "dist/*" -DestinationPath "artifacts/$ZIP_NAME" -Force
+
+          # 计算 SHA256
+          $hash = (Get-FileHash -Algorithm SHA256 "artifacts/$ZIP_NAME").Hash.ToLower()
+          "$hash  $ZIP_NAME" | Out-File -Encoding utf8 "artifacts/checksums-${{ matrix.platform-name }}.txt"
+
+      - name: 📤 Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.platform-name }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 5
+
+  # ========================================================
+  # 阶段 2: 汇总所有平台产物并发布 GitHub Release
+  # ========================================================
+  publish-release:
+    name: 🚀 Publish Unified Release
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Ensure Git Tag Exists (for workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
         run: |
           TAG="${{ github.event.inputs.tag_name }}"
@@ -92,17 +175,37 @@ jobs:
             git push origin "$TAG"
           fi
 
+      - name: 📥 Download All Platform Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: 📋 Merge Checksums & Organize Assets
+        run: |
+          mkdir -p final_release
+          cd release_assets
+          
+          # 合并所有平台的 SHA256 校验和为单个统一 checksums.txt
+          cat checksums-*.txt > ../final_release/checksums.txt 2>/dev/null || true
+          rm -f checksums-*.txt
+          
+          # 将所有平台的包移入发布目录
+          mv NovaStream-* ../final_release/ 2>/dev/null || true
+          cd ..
+          
+          echo "=== 待发布的文件列表 ==="
+          ls -la final_release/
+
       - name: 🚀 Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.package.outputs.version }}
-          name: ${{ github.event.inputs.release_title || steps.package.outputs.version }}
+          tag_name: ${{ github.ref_name || github.event.inputs.tag_name }}
+          name: ${{ github.event.inputs.release_title || github.ref_name || github.event.inputs.tag_name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ github.event.inputs.is_prerelease || false }}
           generate_release_notes: true
           files: |
-            NovaStream-*.zip
-            NovaStream-*.tar.gz
-            checksums.txt
+            final_release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

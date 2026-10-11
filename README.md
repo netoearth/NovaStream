@@ -155,9 +155,47 @@ npm run build
 
 ---
 
-## 6. GitHub Actions 自动化 Releases 打包与发布流水线
+## 6. GitHub Actions 跨平台自动化 Releases 打包与发布流水线
 
-本项目已配置完整的 GitHub Actions CI/CD 流水线（位于 `.github/workflows/release.yml`）。只需推送版本 Tag 或在 GitHub 页面手动触发，即可全自动完成构建、打包与 Release 发布。
+本项目已配置完整的 GitHub Actions 跨平台 CI/CD 矩阵打包流水线（位于 `.github/workflows/release.yml`）。
+支持在 **Linux (Ubuntu)**、**Windows** 和 **macOS** 三大操作系统中并行矩阵构建，自动生成对应平台的归档包，并汇聚发布到 GitHub Releases。
+
+### 核心矩阵构建与产物说明
+| 平台目标 | 运行环境 | 封装格式 | 包含文件 |
+| :--- | :--- | :--- | :--- |
+| **Linux (x64)** | `ubuntu-latest` | `.tar.gz` / `.zip` | `NovaStream-<version>-Linux-x64.tar.gz`, `NovaStream-<version>-Linux-x64.zip` |
+| **Windows (x64)** | `windows-latest` | `.zip` | `NovaStream-<version>-Windows-x64.zip` |
+| **macOS (Universal)** | `macos-latest` | `.tar.gz` / `.zip` | `NovaStream-<version>-macOS-Universal.tar.gz`, `NovaStream-<version>-macOS-Universal.zip` |
+| **校验文件** | 汇总阶段统一生成 | `.txt` | `checksums.txt`（包含全平台所有文件的 SHA256 指纹） |
+
+---
+
+### 常见报错解决：Dependencies lock file is not found
+
+如果在 GitHub Actions 中遇到如下错误：
+```text
+Error: Dependencies lock file is not found in /home/runner/work/...
+Supported file patterns: package-lock.json,npm-shrinkwrap.json,yarn.lock
+```
+
+**原因分析**：
+1. 本地代码提交时漏掉了 `package-lock.json`，导致云端 runner 找不到依赖锁文件。
+2. Actions 配置了强依赖锁文件的缓存（如 `cache: 'npm'`）。
+
+**一键解决步骤**：
+在本地终端执行并提交：
+```bash
+# 1. 确保本地生成 package-lock.json
+npm install --package-lock-only
+
+# 2. 将 package-lock.json 提交并推送到 GitHub
+git add package-lock.json
+git commit -m "chore: commit package-lock.json for CI/CD"
+git push origin main
+```
+> 本项目的 `.github/workflows/release.yml` 已内置容错机制：即使未提交 `package-lock.json`，也会自动降级执行 `npm install --legacy-peer-deps`，并已升级为 **Node.js 22 LTS** 环境，规避 Node.js 20 废弃警报。
+
+---
 
 ### 触发方式 1：打 Git Tag 并推送到 GitHub（推荐）
 
@@ -168,22 +206,22 @@ git tag v1.0.0
 # 2. 推送标签到远程仓库
 git push origin v1.0.0
 ```
-> GitHub Actions 监听到 `v*` 格式的 tag 后，将自动触发构建并创建 Release。
+> GitHub Actions 监听到 `v*` 格式的 tag 后，将自动触发跨平台矩阵构建并在完成后创建 Release。
 
 ### 触发方式 2：在 GitHub 网页端手动触发
 
 1. 访问 GitHub 仓库的 **Actions** 选项卡。
-2. 在左侧选择 **Build & Release** 工作流。
-3. 点击右侧的 **Run workflow** 按钮，输入版本号（如 `v1.0.0`），点击绿色运行按钮即可。
+2. 在左侧选择 **🌐 Cross-Platform Build & Release** 工作流。
+3. 点击右侧的 **Run workflow** 按钮：
+   - 输入版本号（如 `v1.0.0`）
+   - 输入 Release 标题（选填）
+   - 可勾选是否为预发布版本 (Pre-release)
+4. 点击绿色按钮运行，流水线将自动在 GitHub 创建对应的 Tag 与 Release。
 
-### 产物与 Release 内容
-流水线将自动完成以下操作：
-* 自动安装依赖并执行 `npm run lint` 类型语法检查
-* 执行 `npm run build` 生成生产分发包 (`dist/`)
-* 自动压缩打包为 `.zip` 与 `.tar.gz` 独立发布归档
-* 自动生成 SHA256 校验文件 `checksums.txt`
-* 自动基于 Git Commit 提交记录生成 Release Notes 更新日志
-* 自动将资产挂载并发布至仓库的 **Releases** 页面中
+### 权限配置提醒 (GitHub 仓库设置)
+为确保 GitHub Actions 有权限自动创建 Release，请检查 GitHub 仓库设置：
+* 依次进入仓库的 **Settings** -> **Actions** -> **General**。
+* 滚动到 **Workflow permissions**，选择 **Read and write permissions** 并保存。
 
 ---
 
