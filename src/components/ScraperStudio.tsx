@@ -232,12 +232,36 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
           label: `本地上传封面 (${file.name})`,
         };
         const currentOpts = lastScrapedItem.coverOptions || [];
+        const updatedOpts = [newCoverOpt, ...currentOpts];
         setLastScrapedItem({
           ...lastScrapedItem,
           posterUrl: dataUrl,
-          coverOptions: [newCoverOpt, ...currentOpts],
+          coverOptions: updatedOpts,
         });
-        setStatusNotification(`本地封面 "${file.name}" 已上传并设为主海报！`);
+
+        // Auto-sync into mediaItems so returning to home immediately shows updated poster!
+        const cleanScraped = lastScrapedItem.title.split('(')[0].trim().toLowerCase();
+        const existingIndex = mediaItems.findIndex((m) => {
+          const matchId = m.id === lastScrapedItem.id;
+          const cleanExisting = m.title.split('(')[0].trim().toLowerCase();
+          const matchTitle = (cleanScraped.length > 1 && cleanExisting.includes(cleanScraped)) ||
+            (cleanExisting.length > 1 && cleanScraped.includes(cleanExisting));
+          const matchFile = m.filePath === lastScrapedItem.filePath;
+          return matchId || matchTitle || matchFile;
+        });
+
+        if (existingIndex >= 0) {
+          const updatedList = [...mediaItems];
+          updatedList[existingIndex] = {
+            ...updatedList[existingIndex],
+            posterUrl: dataUrl,
+            coverOptions: updatedOpts,
+          };
+          onUpdateMedia(updatedList);
+          setStatusNotification(`本地封面 "${file.name}" 已上传并即时保存至影音库！返回主页即可查看新封面。`);
+        } else {
+          setStatusNotification(`本地封面 "${file.name}" 已上传并设为主海报！`);
+        }
         setTimeout(() => setStatusNotification(''), 3000);
       }
     };
@@ -254,14 +278,39 @@ export const ScraperStudio: React.FC<ScraperStudioProps> = ({
       label: '自定义网络海报链接',
     };
     const currentOpts = lastScrapedItem.coverOptions || [];
+    const updatedOpts = [newCoverOpt, ...currentOpts];
+    const targetUrl = customCoverInput.trim();
     setLastScrapedItem({
       ...lastScrapedItem,
-      posterUrl: customCoverInput.trim(),
-      coverOptions: [newCoverOpt, ...currentOpts],
+      posterUrl: targetUrl,
+      coverOptions: updatedOpts,
     });
+
+    // Auto-sync into mediaItems so returning to home immediately shows updated poster!
+    const cleanScraped = lastScrapedItem.title.split('(')[0].trim().toLowerCase();
+    const existingIndex = mediaItems.findIndex((m) => {
+      const matchId = m.id === lastScrapedItem.id;
+      const cleanExisting = m.title.split('(')[0].trim().toLowerCase();
+      const matchTitle = (cleanScraped.length > 1 && cleanExisting.includes(cleanScraped)) ||
+        (cleanExisting.length > 1 && cleanScraped.includes(cleanExisting));
+      const matchFile = m.filePath === lastScrapedItem.filePath;
+      return matchId || matchTitle || matchFile;
+    });
+
+    if (existingIndex >= 0) {
+      const updatedList = [...mediaItems];
+      updatedList[existingIndex] = {
+        ...updatedList[existingIndex],
+        posterUrl: targetUrl,
+        coverOptions: updatedOpts,
+      };
+      onUpdateMedia(updatedList);
+      setStatusNotification('已应用自定义海报链接并即时保存至影音库！返回主页即可查看新封面。');
+    } else {
+      setStatusNotification('已应用自定义海报链接！');
+    }
     setCustomCoverInput('');
-    setStatusNotification('已应用自定义海报链接！');
-    setTimeout(() => setStatusNotification(''), 2500);
+    setTimeout(() => setStatusNotification(''), 3000);
   };
 
   // Toggle mounting of subtitle track

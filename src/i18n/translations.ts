@@ -12,6 +12,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     navTranscoder: '硬件转码控制台',
     navSyncPlay: '多端同步影厅',
     navStorage: '存储源管理',
+    navDatabase: 'SQLite 数据库',
     navSettings: '系统设置',
 
     searchPlaceholder: '搜索电影、剧集、导演、格式 (如: 4K, Atmos, 诺兰)...',
@@ -126,6 +127,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     navTranscoder: '硬體轉碼控制台',
     navSyncPlay: '多端同步影廳',
     navStorage: '存儲源管理',
+    navDatabase: 'SQLite 資料庫',
     navSettings: '系統設定',
 
     searchPlaceholder: '搜尋電影、劇集、導演、規格 (例如: 4K, Atmos)...',
@@ -234,6 +236,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     navTranscoder: 'HW Transcoder Lab',
     navSyncPlay: 'SyncPlay Cinema',
     navStorage: 'Storage Vaults',
+    navDatabase: 'SQLite Database',
     navSettings: 'Preferences',
 
     searchPlaceholder: 'Search titles, directors, codecs (e.g., 4K, Atmos, Nolan)...',
@@ -342,6 +345,7 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     navTranscoder: 'HWトランスコーダー',
     navSyncPlay: 'マルチ端末同期シネマ',
     navStorage: 'ストレージ管理',
+    navDatabase: 'SQLite データベース',
     navSettings: '設定',
 
     searchPlaceholder: 'タイトル、監督、仕様で検索 (4K、Atmos、新海誠など)...',

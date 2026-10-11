@@ -13,7 +13,8 @@ import {
   HardDrive,
   Heart,
   SlidersHorizontal,
-  Flame
+  Flame,
+  Database
 } from 'lucide-react';
 
 interface HomeViewProps {
@@ -228,8 +229,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           )}
 
-          <div className="text-xs text-neutral-400 font-mono">
-            共收录 <span className="text-neutral-200 font-semibold">{filteredItems.length}</span> 部媒体
+          <div className="flex items-center gap-2 text-xs font-mono">
+            {searchQuery.trim() ? (
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[11px]">
+                <Database className="w-3 h-3 text-emerald-400" />
+                <span>SQLite B-Tree 极速命中: {filteredItems.length} 部</span>
+              </span>
+            ) : (
+              <span className="text-neutral-400 flex items-center gap-1.5">
+                <Database className="w-3 h-3 text-emerald-500" />
+                <span>SQLite 库同步: <strong className="text-neutral-200">{filteredItems.length}</strong> 部</span>
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -100,7 +100,7 @@ const ONLINE_DATABASE: Record<string, Partial<MediaItem>> = {
     director: '克里斯托弗·诺兰 (Christopher Nolan)',
     genres: ['传记', '历史', '剧情'],
     overview: '聚焦“原子弹之父”罗伯特·奥本海默主导曼哈顿计划研发首枚核武器的历程及其战后受到的政治审判。',
-    posterUrl: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80',
+    posterUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80',
     backdropUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&auto=format&fit=crop&q=80',
     matchedSource: 'TMDB',
     matchScore: 99.4,
@@ -116,7 +116,7 @@ const ONLINE_DATABASE: Record<string, Partial<MediaItem>> = {
     director: '丹尼斯·维伦纽瓦 (Denis Villeneuve)',
     genres: ['科幻', '冒险', '剧情'],
     overview: '保罗·厄崔迪携手弗雷曼人向毁灭其家族的哈克南家族展开复仇，并面对宇宙命运的选择。',
-    posterUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80',
+    posterUrl: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&auto=format&fit=crop&q=80',
     backdropUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80',
     matchedSource: 'TMDB',
     matchScore: 98.8,
@@ -132,8 +132,8 @@ const ONLINE_DATABASE: Record<string, Partial<MediaItem>> = {
     director: '克里斯托弗·诺兰 (Christopher Nolan)',
     genres: ['科幻', '冒险', '悬疑'],
     overview: '地球恶化危机下，宇航员穿越土星虫洞深入未知星系寻找人类文明生存新空间。',
-    posterUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80',
-    backdropUrl: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=1600&auto=format&fit=crop&q=80',
+    posterUrl: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80',
+    backdropUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1600&auto=format&fit=crop&q=80',
     matchedSource: 'Douban',
     matchScore: 99.8,
   },
@@ -148,7 +148,7 @@ const ONLINE_DATABASE: Record<string, Partial<MediaItem>> = {
     director: '今石洋之 (Hiroyuki Imaishi)',
     genres: ['动画', '动作', '科幻'],
     overview: '在改造义体盛行的夜之城，底层少年大卫为了复仇成为法外佣兵的悲壮物语。',
-    posterUrl: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80',
+    posterUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80',
     backdropUrl: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=1600&auto=format&fit=crop&q=80',
     matchedSource: 'Bangumi',
     matchScore: 99.1,
@@ -164,8 +164,8 @@ const ONLINE_DATABASE: Record<string, Partial<MediaItem>> = {
     director: '宫崎骏 (Hayao Miyazaki)',
     genres: ['动画', '奇幻', '冒险'],
     overview: '少女千寻误入神隐小镇，在汤婆婆手下打工并拯救变成猪的父母。',
-    posterUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-    backdropUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1600&auto=format&fit=crop&q=80',
+    posterUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80',
+    backdropUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80',
     matchedSource: 'Douban',
     matchScore: 99.6,
   },
@@ -180,7 +180,7 @@ const ONLINE_DATABASE: Record<string, Partial<MediaItem>> = {
     director: '丹尼斯·维伦纽瓦 (Denis Villeneuve)',
     genres: ['科幻', '悬疑', '剧情'],
     overview: '洛杉矶银翼杀手K在追查案件中发现了一个埋藏已久的绝密线索，该线索不仅关乎社会秩序甚至可能颠覆人类历史。',
-    posterUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80',
+    posterUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
     backdropUrl: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=1600&auto=format&fit=crop&q=80',
     matchedSource: 'TMDB',
     matchScore: 98.2,
@@ -191,32 +191,32 @@ export function getCoverCandidatesForMedia(title: string, defaultPoster?: string
   const t = title.toLowerCase();
   if (t.includes('oppenheimer') || t.includes('奥本海默')) {
     return [
-      { id: 'cov-opp-1', url: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 官方主视觉海报 (3840×2160 UHD)' },
-      { id: 'cov-opp-2', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣电影中国公映版海报 (4K)' },
-      { id: 'cov-opp-3', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: 'Fanart.tv 纯净版艺术海报 (Textless)' },
-      { id: 'cov-opp-4', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'IMAX 独家限量纪念版海报' },
+      { id: 'cov-opp-1', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 官方 4K 金色烈焰主视觉海报 (3840×2160 UHD)' },
+      { id: 'cov-opp-2', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣电影中国公映定档版 4K 海报' },
+      { id: 'cov-opp-3', url: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'IMAX 70mm 原始胶片限量典藏海报' },
+      { id: 'cov-opp-4', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: 'Fanart.tv 纯净无字版艺术封绘 (Textless)' },
     ];
   }
   if (t.includes('dune') || t.includes('沙丘')) {
     return [
-      { id: 'cov-dune-1', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 官方预告主视觉海报 (4K)' },
-      { id: 'cov-dune-2', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣中国公映定档独家海报' },
-      { id: 'cov-dune-3', url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '厄拉科斯沙漠风暴艺术纯净海报' },
-      { id: 'cov-dune-4', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'IMAX 巨幕专属艺术壁纸' },
+      { id: 'cov-dune-1', url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 官方厄拉科斯金色沙漠主视觉 (4K UHD)' },
+      { id: 'cov-dune-2', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣中国公映定档独家限量海报' },
+      { id: 'cov-dune-3', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'IMAX 巨幕专属深邃星空版海报' },
+      { id: 'cov-dune-4', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '蓝光限量原盘艺术纯净封面' },
     ];
   }
   if (t.includes('interstellar') || t.includes('星际穿越')) {
     return [
-      { id: 'cov-ist-1', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 虫洞深空探索官方海报 (4K)' },
-      { id: 'cov-ist-2', url: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣十周年重映高分纪念海报' },
-      { id: 'cov-ist-3', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '黑洞卡冈图雅 4K 纯净艺术壁纸' },
+      { id: 'cov-ist-1', url: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80', source: 'TMDB', label: 'TMDB 卡冈图雅黑洞 4K 官方原画海报' },
+      { id: 'cov-ist-2', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '豆瓣十周年重映高分纪念海报 (4K)' },
+      { id: 'cov-ist-3', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '深空虫洞探索纯净版艺术壁纸' },
     ];
   }
   if (t.includes('cyberpunk') || t.includes('边缘行者')) {
     return [
-      { id: 'cov-cp-1', url: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80', source: 'Bangumi', label: 'Trigger 官方动画原画主海报' },
-      { id: 'cov-cp-2', url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '夜之城露西与大卫月面梦想海报' },
-      { id: 'cov-cp-3', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '赛博霓虹纯净艺术封绘 (4K)' },
+      { id: 'cov-cp-1', url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80', source: 'Bangumi', label: 'Trigger 官方月面梦想 4K 终极海报' },
+      { id: 'cov-cp-2', url: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80', source: 'Douban', label: '夜之城大卫与露西原画纪念封绘' },
+      { id: 'cov-cp-3', url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&auto=format&fit=crop&q=80', source: 'Fanart.tv', label: '赛博霓虹纯净艺术封绘 (4K)' },
     ];
   }
 

@@ -38,9 +38,11 @@ import { ScraperStudio } from './components/ScraperStudio';
 import { TranscoderLab } from './components/TranscoderLab';
 import { SyncPlayHub } from './components/SyncPlayHub';
 import { StorageManager } from './components/StorageManager';
+import { DatabaseStudio } from './components/DatabaseStudio';
 import { SettingsView } from './components/SettingsView';
 import { MediaDetailModal } from './components/MediaDetailModal';
 import { VideoPlayer } from './components/VideoPlayer';
+import { sqliteService } from './services/sqliteService';
 import { Play, Pause, SkipBack, SkipForward, Music, ExternalLink } from 'lucide-react';
 
 export default function App() {
@@ -57,9 +59,10 @@ export default function App() {
   const [globalMusicState, setGlobalMusicState] = useState<PlaybackState | null>(null);
   const [globalMusicControl, setGlobalMusicControl] = useState<ExternalMusicControl | null>(null);
 
-  // Persist media items, storage folders, and music tracks
+  // Persist media items, storage folders, and music tracks & auto-sync to local SQLite database
   useEffect(() => {
     savePersistedMedia(mediaItems);
+    sqliteService.syncMediaItems(mediaItems);
   }, [mediaItems]);
 
   useEffect(() => {
@@ -68,6 +71,7 @@ export default function App() {
 
   useEffect(() => {
     savePersistedMusicTracks(musicTracks);
+    sqliteService.syncMusicTracks(musicTracks);
   }, [musicTracks]);
 
   // Selected item for modal details
@@ -320,6 +324,17 @@ export default function App() {
             onRescanFolder={handleRescanFolder}
             onRemoveFolder={handleRemoveFolder}
             onNavigateToMovies={() => setActiveTab('movies')}
+            onPlayMedia={handlePlayMedia}
+          />
+        )}
+
+        {activeTab === 'database' && (
+          <DatabaseStudio
+            mediaItems={mediaItems}
+            musicTracks={musicTracks}
+            storageFolders={storageFolders}
+            language={language}
+            onUpdateMedia={setMediaItems}
             onPlayMedia={handlePlayMedia}
           />
         )}
