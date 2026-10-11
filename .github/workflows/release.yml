@@ -95,31 +95,25 @@ jobs:
         with:
           node-version: 22
 
-      # Linux / macOS 依赖安装
-      # 针对 macOS: 移除非当前平台的 lockfile，防止 npm issue #4828 导致 native bindings 缺失
+      # Linux / macOS 依赖安装 (全平台 lockfile 已锁定)
       - name: 📦 Install dependencies (Unix)
         if: matrix.shell == 'bash'
         run: |
-          if [ "${{ matrix.os }}" = "macos-latest" ] && [ -f package-lock.json ]; then
-            rm -f package-lock.json
-          fi
           if [ -f package-lock.json ]; then
             npm ci || npm install --legacy-peer-deps
           else
             npm install --legacy-peer-deps
           fi
 
-      # Windows 依赖安装
-      # 彻底规避 npm issue #4828 (Cannot find module '@rolldown/binding-win32-x64-msvc'):
-      # 移除在 Linux 环境生成的 package-lock.json，强制 npm 为 Windows 实时解析并下载本地原生二进制
+      # Windows 依赖安装 (全平台 lockfile 已锁定，包含 win32 原生包)
       - name: 📦 Install dependencies (Windows)
         if: matrix.shell == 'pwsh'
         run: |
           if (Test-Path "package-lock.json") {
-            Write-Host "Removing cross-platform package-lock.json to avoid npm issue #4828..."
-            Remove-Item "package-lock.json" -Force
+            try { npm ci } catch { npm install --legacy-peer-deps }
+          } else {
+            npm install --legacy-peer-deps
           }
-          npm install --legacy-peer-deps
 
       - name: 🏗️ Build production bundle (Vite)
         run: npm run build

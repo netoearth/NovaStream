@@ -1,0 +1,151 @@
+name: 🚀 Tauri v2 Desktop Cross-Platform Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '发布版本号 Tag (例如: v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      release_title:
+        description: 'Release 标题'
+        required: false
+        default: 'NovaStream Desktop Client'
+      is_prerelease:
+        description: '是否为预发布版本 (Pre-release)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ========================================================
+  # 阶段 1: 静态类型与语法预检
+  # ========================================================
+  pre-check:
+    name: 🔍 Pre-check & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js (22 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 📦 Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
+
+      - name: 🔍 Type check
+        run: npm run lint
+
+  # ========================================================
+  # 阶段 2: Tauri v2 跨平台原生客户端构建矩阵
+  # 针对 macOS 通用二进制 与 Linux WebKit2GTK-4.1 深度优化
+  # ========================================================
+  build-tauri:
+    name: 📦 Build (${{ matrix.platform-name }})
+    needs: pre-check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ====================================================
+          # macOS: 构建 Universal Binary (同时兼容 Apple Silicon & Intel)
+          # 避坑点 1: 必须添加 aarch64-apple-darwin 与 x86_64-apple-darwin
+          # 且指定 --target universal-apple-darwin 打包 DMG
+          # ====================================================
+          - os: macos-latest
+            platform-name: macOS-Universal
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+            tauri-args: '--target universal-apple-darwin'
+
+          # ====================================================
+          # Linux: Ubuntu 22.04 LTS
+          # 避坑点 2: Tauri v2 必须使用 libwebkit2gtk-4.1-dev (而非 v1 的 4.0)
+          # 缺少会导致 cargo build 报错找不到 gio-2.0 或 webkit2gtk
+          # ====================================================
+          - os: ubuntu-22.04
+            platform-name: Linux-x64
+            rust-targets: ''
+            tauri-args: ''
+
+          # ====================================================
+          # Windows: Windows x64 (生成 .msi 与 .exe 安装包)
+          # ====================================================
+          - os: windows-latest
+            platform-name: Windows-x64
+            rust-targets: ''
+            tauri-args: ''
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ⚙️ Setup Node.js (22 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 避坑点 2：针对 Linux (Tauri v2) 安装 libwebkit2gtk-4.1-dev 及核心依赖
+      - name: 🐧 Install Linux system dependencies (WebKit2GTK 4.1)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libxdo-dev \
+            patchelf
+
+      # 避坑点 1：配置 Rust 工具链，macOS 下自动注入 aarch64 与 x86_64 双 targets
+      - name: 🦀 Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: ⚡ Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: 📦 Install Node dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
+
+      # 使用官方 tauri-action 自动完成前端 build 与 cargo tauri build
+      - name: 🏗️ Build & Package Desktop Application (Tauri v2)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name || github.event.inputs.tag_name }}
+          releaseName: ${{ github.event.inputs.release_title || github.ref_name || github.event.inputs.tag_name }}
+          releaseBody: 'NovaStream 跨平台桌面客户端全自动发布 (macOS Universal DMG, Windows MSI/EXE, Linux DEB/AppImage)'
+          prerelease: ${{ github.event.inputs.is_prerelease || false }}
+          args: ${{ matrix.tauri-args }}

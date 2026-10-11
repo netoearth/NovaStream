@@ -225,4 +225,22 @@ git push origin v1.0.0
 
 ---
 
+## 7. Tauri v2 跨平台原生桌面客户端打包（避坑规范与流水线）
+
+本项目已支持 **Tauri v2** 原生桌面客户端打包（独立工作流文件 `.github/workflows/tauri-release.yml` 与配置文件目录 `src-tauri/`）。
+生成原生可执行安装程序（Windows `.exe`/`.msi`、macOS `.dmg` 通用架构、Linux `.deb`/`.AppImage`）。
+
+### 核心避坑点与实现
+1. **macOS 通用二进制 (Universal Binary)**：
+   * **原理**：配置 `--target universal-apple-darwin` 可以保证打出的 DMG 同时支持 Apple Silicon (M1/M2/M3/M4) 和 Intel 芯片的 Mac。
+   * **实现**：流水线中 Rust 工具链预装 `aarch64-apple-darwin` 与 `x86_64-apple-darwin` 双架构 target，打包时自动注入 `--target universal-apple-darwin`。
+2. **Linux 依赖库问题 (Tauri v2)**：
+   * **原理**：Tauri v2 在 Linux 上使用的是 `libwebkit2gtk-4.1-dev`（Tauri v1 为 4.0），缺少该步骤会导致 Linux 节点在 `cargo build` 阶段报错提示找不到 `gio-2.0` 或 `webkit2gtk`。
+   * **实现**：流水线预置 `sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf`。
+
+### 触发 Tauri 桌面端全自动发布：
+* 推送带版本号的 Git Tag（如 `git tag v1.0.0 && git push origin v1.0.0`），或在 GitHub Actions 页面手动运行 **🚀 Tauri v2 Desktop Cross-Platform Release** 即可全自动完成全平台编译和 Releases 发布。
+
+---
+
 *NovaStream Local Media Cinema Hub · Released under Apache-2.0 License.*
