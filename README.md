@@ -155,4 +155,36 @@ npm run build
 
 ---
 
+## 6. GitHub Actions 自动化 Releases 打包与发布流水线
+
+本项目已配置完整的 GitHub Actions CI/CD 流水线（位于 `.github/workflows/release.yml`）。只需推送版本 Tag 或在 GitHub 页面手动触发，即可全自动完成构建、打包与 Release 发布。
+
+### 触发方式 1：打 Git Tag 并推送到 GitHub（推荐）
+
+```bash
+# 1. 创建符合语义化版本的标签 (以 v 开头)
+git tag v1.0.0
+
+# 2. 推送标签到远程仓库
+git push origin v1.0.0
+```
+> GitHub Actions 监听到 `v*` 格式的 tag 后，将自动触发构建并创建 Release。
+
+### 触发方式 2：在 GitHub 网页端手动触发
+
+1. 访问 GitHub 仓库的 **Actions** 选项卡。
+2. 在左侧选择 **Build & Release** 工作流。
+3. 点击右侧的 **Run workflow** 按钮，输入版本号（如 `v1.0.0`），点击绿色运行按钮即可。
+
+### 产物与 Release 内容
+流水线将自动完成以下操作：
+* 自动安装依赖并执行 `npm run lint` 类型语法检查
+* 执行 `npm run build` 生成生产分发包 (`dist/`)
+* 自动压缩打包为 `.zip` 与 `.tar.gz` 独立发布归档
+* 自动生成 SHA256 校验文件 `checksums.txt`
+* 自动基于 Git Commit 提交记录生成 Release Notes 更新日志
+* 自动将资产挂载并发布至仓库的 **Releases** 页面中
+
+---
+
 *NovaStream Local Media Cinema Hub · Released under Apache-2.0 License.*

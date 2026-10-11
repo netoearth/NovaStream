@@ -1,0 +1,105 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '发布版本号 Tag (例如: v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      release_title:
+        description: 'Release 标题'
+        required: false
+        default: 'NovaStream Release'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: 🚀 Build, Package & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: |
+          npm ci || npm install --legacy-peer-deps
+
+      - name: 🔍 Type check & Lint
+        run: |
+          npm run lint
+
+      - name: 🏗️ Build production bundle
+        run: |
+          npm run build
+
+      - name: 📦 Archive Build Artifacts
+        id: package
+        run: |
+          VERSION="${{ github.ref_name }}"
+          if [ -z "$VERSION" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.tag_name }}"
+          fi
+          
+          # 确保 dist 目录构建成功
+          if [ ! -d "dist" ]; then
+            echo "Error: dist directory does not exist!"
+            exit 1
+          fi
+
+          ZIP_NAME="NovaStream-${VERSION}-web.zip"
+          TAR_NAME="NovaStream-${VERSION}-web.tar.gz"
+
+          # 制作压缩包
+          cd dist
+          zip -r "../${ZIP_NAME}" ./*
+          tar -czf "../${TAR_NAME}" ./*
+          cd ..
+
+          # 生成 SHA256 校验和文件
+          sha256sum "${ZIP_NAME}" "${TAR_NAME}" > checksums.txt
+
+          echo "zip_file=${ZIP_NAME}" >> $GITHUB_OUTPUT
+          echo "tar_file=${TAR_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: 🏷️ Ensure Git Tag Exists (for manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="${{ github.event.inputs.tag_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: 🚀 Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.package.outputs.version }}
+          name: ${{ github.event.inputs.release_title || steps.package.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            NovaStream-*.zip
+            NovaStream-*.tar.gz
+            checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
