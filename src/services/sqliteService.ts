@@ -5,6 +5,55 @@ const SQLITE_IDB_NAME = 'novastream_sqlite_vault';
 const SQLITE_IDB_STORE = 'sqlite_blobs';
 const SQLITE_DB_KEY = 'main_database_bytes';
 
+// Multi-layer resilient loader for SQLite WebAssembly
+async function getSqlJsEngine(): Promise<any> {
+  const getWasmUrl = (file: string) => {
+    if (file.endsWith('.wasm')) {
+      const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+      const cleanBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+      return `${cleanBase}sql-wasm.wasm`;
+    }
+    return file;
+  };
+
+  // Tier 1: Local same-origin static WASM asset (fastest, zero external network dependency)
+  try {
+    return await initSqlJs({
+      locateFile: getWasmUrl,
+    });
+  } catch (localErr) {
+    console.warn('Direct streaming compile for local sql-wasm.wasm failed, trying ArrayBuffer fetch:', localErr);
+  }
+
+  // Tier 2: Fetch local WASM binary directly into ArrayBuffer (bypasses streaming compile HTTP status or MIME constraints)
+  try {
+    const wasmUrl = getWasmUrl('sql-wasm.wasm');
+    const response = await fetch(wasmUrl);
+    if (response.ok) {
+      const wasmBinary = await response.arrayBuffer();
+      const bytes = new Uint8Array(wasmBinary);
+      // Verify valid WASM magic number (\0asm)
+      if (bytes.length >= 4 && bytes[0] === 0x00 && bytes[1] === 0x61 && bytes[2] === 0x73 && bytes[3] === 0x6d) {
+        return await initSqlJs({
+          wasmBinary,
+        });
+      }
+    }
+  } catch (bufErr) {
+    console.warn('ArrayBuffer fetch failed, trying matching CDN fallback:', bufErr);
+  }
+
+  // Tier 3: Version-matched 1.14.2 CDN fallback
+  try {
+    return await initSqlJs({
+      locateFile: (file) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.14.2/${file}`,
+    });
+  } catch (cdnErr) {
+    console.warn('CDN fallback also failed:', cdnErr);
+    throw cdnErr;
+  }
+}
+
 export interface SqlQueryResult {
   columns: string[];
   values: any[][];
@@ -26,6 +75,7 @@ export interface SqliteStats {
 
 class SqliteService {
   private db: Database | null = null;
+  private sqlEngine: any = null;
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
   private memoryFallbackData: {
@@ -44,9 +94,8 @@ class SqliteService {
 
     this.initPromise = (async () => {
       try {
-        const SQL = await initSqlJs({
-          locateFile: (file) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/${file}`,
-        });
+        const SQL = await getSqlJsEngine();
+        this.sqlEngine = SQL;
 
         // Try to load existing database bytes from IndexedDB
         const savedBytes = await this.loadBytesFromIndexedDb();
@@ -511,9 +560,8 @@ class SqliteService {
    */
   public async importDatabaseBinary(bytes: Uint8Array): Promise<boolean> {
     try {
-      const SQL = await initSqlJs({
-        locateFile: (file) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/${file}`,
-      });
+      await this.initialize();
+      const SQL = this.sqlEngine || (await getSqlJsEngine());
       const newDb = new SQL.Database(bytes);
       this.db = newDb;
       await this.persistToIndexedDb();

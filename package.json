@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node -e \"const fs=require('fs'); if (!fs.existsSync('public/sql-wasm.wasm')) { fs.mkdirSync('public', {recursive:true}); fs.copyFileSync('node_modules/sql.js/dist/sql-wasm.wasm', 'public/sql-wasm.wasm'); }\"",
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "prebuild": "node -e \"const fs=require('fs'); if (!fs.existsSync('public/sql-wasm.wasm')) { fs.mkdirSync('public', {recursive:true}); fs.copyFileSync('node_modules/sql.js/dist/sql-wasm.wasm', 'public/sql-wasm.wasm'); }\"",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
