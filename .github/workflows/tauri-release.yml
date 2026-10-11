@@ -130,13 +130,22 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
+      # 避坑点 3: 清理 node_modules 和 lockfile，修复原生模块绑定问题
+      - name: 🧹 Clean Node cache (fix native binding issues)
+        run: |
+          rm -rf node_modules
+          if [ -f package-lock.json ]; then
+            rm -f package-lock.json
+          fi
+
       - name: 📦 Install Node dependencies
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci || npm install --legacy-peer-deps
-          else
-            npm install --legacy-peer-deps
-          fi
+          npm install --legacy-peer-deps
+
+      # 避坑点 4: 重新构建 Tailwind 原生绑定，确保 @tailwindcss/oxide 正确加载
+      - name: 🔧 Rebuild Tailwind native bindings
+        run: |
+          npm rebuild @tailwindcss/oxide --build-from-source
 
       # 使用官方 tauri-action 自动完成前端 build 与 cargo tauri build
       - name: 🏗️ Build & Package Desktop Application (Tauri v2)
